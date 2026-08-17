@@ -21,7 +21,7 @@ func VeriTabaniBaglanma() {
 		log.Fatal("Url bulunamadı")
 	}
 	var err error
-	DB, err = sql.Open("pqx", veriTabaniUrl)
+	DB, err = sql.Open("pgx", veriTabaniUrl)
 	if err != nil {
 		log.Fatal("Veri Tabanı Başlatılamadı")
 	}
