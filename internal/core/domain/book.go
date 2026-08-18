@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type Book struct {
 	ID          int       `db:"id" json:"id"`
@@ -11,4 +14,12 @@ type Book struct {
 	Description string    `db:"description" json:"description"`
 	StockCount  int       `db:"stock_count" json:"stock_count"`
 	CreatedAt   time.Time `db:"created_at" json:"created_at"`
+}
+
+type BookRepository interface {
+	Create(ctx context.Context, b *Book) error
+	Update(ctx context.Context, b *Book) error
+	Delete(ctx context.Context, id int64) error
+	GetByID(CTX context.Context, id int64) error
+	List(ctx context.Context, limit, offset int) ([]*Book, error)
 }
