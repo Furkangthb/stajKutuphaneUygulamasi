@@ -45,13 +45,13 @@ func (s *BookServices) BookDelete(ctx context.Context, id int64) error {
 	if err != nil {
 		return err
 	}
-	return err
+	return nil
 
 }
 
-func (s *BookServices) BookUpdate(ctx context.Context, id int, title string, author string, genre string, publich_date time.Time, description string, stock_count int) (*domain.Book, error) {
+func (s *BookServices) BookUpdate(ctx context.Context, id int64, title string, author string, genre string, publich_date time.Time, description string, stock_count int) (*domain.Book, error) {
 	NewBook := domain.Book{
-		ID:          id,
+		ID:          int(id),
 		Title:       title,
 		Author:      author,
 		Genre:       genre,
@@ -66,4 +66,20 @@ func (s *BookServices) BookUpdate(ctx context.Context, id int, title string, aut
 
 	}
 	return &NewBook, nil
+}
+
+func (s *BookServices) BookList(ctx context.Context, page int, page_size int) ([]*domain.Book, error) {
+	if page < 0 {
+		page = 1
+	}
+	if page_size < 0 || page_size > 100 {
+		page_size = 20
+	}
+	offset := (page - 1) * page_size
+	user, err := s.repo.BookList(ctx, page_size, offset)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+
 }

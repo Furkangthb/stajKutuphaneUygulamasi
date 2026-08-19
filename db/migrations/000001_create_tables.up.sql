@@ -17,7 +17,8 @@ CREATE TABLE books(
     publish_date DATE,
     description TEXT,
     stock_count INTEGER DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP 
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    
 );
 
 CREATE TABLE reservations(

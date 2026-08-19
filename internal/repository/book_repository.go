@@ -20,14 +20,14 @@ func (r *BookRepository) BookCreate(ctx context.Context, book *domain.Book) erro
 	err := r.db.QueryRowContext(ctx, query, book.Title, book.Author, book.Genre, book.PublishDate, book.Description, book.StockCount).Scan(&book.ID)
 
 	if err != nil {
-		return nil
+		return err
 	}
 	return nil
 }
 
 func (r *BookRepository) BookGetByID(ctx context.Context, id int64) (*domain.Book, error) {
 	query := `SELECT id,title,author,genre,publish_date,description,stock_count
-			FROM book
+			FROM books
 			WHERE id=$1`
 
 	book := &domain.Book{}
@@ -40,8 +40,8 @@ func (r *BookRepository) BookGetByID(ctx context.Context, id int64) (*domain.Boo
 
 func (r *BookRepository) BookDelete(ctx context.Context, id int64) error {
 	query := `DELETE 
-			FROM book
-			WHERE id=&1`
+			FROM books
+			WHERE id=$1`
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return err
@@ -51,7 +51,7 @@ func (r *BookRepository) BookDelete(ctx context.Context, id int64) error {
 		return err
 	}
 	if rowsAffected == 0 {
-		return err
+		return sql.ErrNoRows
 	}
 	return nil
 }
@@ -61,7 +61,7 @@ func (r *BookRepository) BookUpdate(ctx context.Context, book *domain.Book) erro
 			SET title=$1,author=$2,genre=$3,publish_date=$4,description=$5,stock_count=$6
 			WHERE id=$7`
 
-	result, err := r.db.ExecContext(ctx, query, book.Title, book.Author, book.Genre, book.PublishDate, book.Description, book.StockCount)
+	result, err := r.db.ExecContext(ctx, query, book.Title, book.Author, book.Genre, book.PublishDate, book.Description, book.StockCount, book.ID)
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (r *BookRepository) BookUpdate(ctx context.Context, book *domain.Book) erro
 }
 
 func (r *BookRepository) BookList(ctx context.Context, limit, offset int) ([]*domain.Book, error) {
-	query := `SELECT title,author,genre,publish_date,description,stock_count
+	query := `SELECT id,title,author,genre,publish_date,description,stock_count
 			FROM books
 			ORDER BY id
 			LIMIT $1 OFFSET $2`

@@ -106,7 +106,7 @@ func (h *BookHandlers) BookUpdate(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	book, err := h.bookService.BookUpdate(ctx, int(id), rework.Title, rework.Author, rework.Genre, rework.PublishDate, rework.Description, rework.StockCount)
+	book, err := h.bookService.BookUpdate(ctx, id, rework.Title, rework.Author, rework.Genre, rework.PublishDate, rework.Description, rework.StockCount)
 	if err != nil {
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
@@ -114,4 +114,17 @@ func (h *BookHandlers) BookUpdate(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, book)
+}
+
+func (h *BookHandlers) BookList(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	page_size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	books, err := h.bookService.BookList(c.Request.Context(), page, page_size)
+	if err != nil {
+		c.JSON(400, gin.H{
+			"Hata": err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, books)
 }
