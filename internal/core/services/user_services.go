@@ -15,7 +15,7 @@ func NewUserServices(repo domain.UserRepository) *UserServices {
 	return &UserServices{repo: repo}
 }
 
-func (s *UserServices) UserRegister(ctx context.Context, ad string, soyad string, phone string, email string, sifre string, role string) (*domain.User, error) {
+func (s *UserServices) UserRegister(ctx context.Context, ad string, soyad string, phone string, email string, sifre string) (*domain.User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(sifre), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -26,7 +26,6 @@ func (s *UserServices) UserRegister(ctx context.Context, ad string, soyad string
 		Phone:        phone,
 		Email:        email,
 		PasswordHash: string(hash),
-		Role:         role,
 	}
 	err = s.repo.Create(ctx, &yeniKullanici)
 	if err != nil {

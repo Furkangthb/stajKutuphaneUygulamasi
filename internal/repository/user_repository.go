@@ -40,13 +40,13 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id int64) (*domain.User, error) {
-	query := `SELECT id,first_name,last_name,phone,email,password_hash
+	query := `SELECT id,first_name,last_name,phone,email,password_hash,role
 			FROM "users"
 			WHERE id=$1`
 
 	user := &domain.User{}
 
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&user.ID, &user.FirstName, &user.LastName, &user.Phone, &user.PasswordHash)
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&user.ID, &user.FirstName, &user.LastName, &user.Phone, &user.PasswordHash, &user.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (r *UserRepository) Delete(ctx context.Context, id int64) error {
 		return err
 	}
 	if rowAffected == 0 {
-		return err
+		return sql.ErrNoRows
 	}
 	return nil
 }

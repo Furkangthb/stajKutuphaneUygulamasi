@@ -69,17 +69,17 @@ func (s *BookServices) BookUpdate(ctx context.Context, id int64, title string, a
 }
 
 func (s *BookServices) BookList(ctx context.Context, page int, page_size int) ([]*domain.Book, error) {
-	if page < 0 {
+	if page <= 0 {
 		page = 1
 	}
 	if page_size < 0 || page_size > 100 {
 		page_size = 20
 	}
 	offset := (page - 1) * page_size
-	user, err := s.repo.BookList(ctx, page_size, offset)
+	book, err := s.repo.BookList(ctx, page_size, offset)
 	if err != nil {
 		return nil, err
 	}
-	return user, nil
+	return book, nil
 
 }
