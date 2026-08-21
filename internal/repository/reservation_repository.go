@@ -42,6 +42,22 @@ func (r *ReservationRepository) ReservationUpdate(ctx context.Context, reservati
 	return nil
 }
 
+func (r *ReservationRepository) ReservationGetByID(ctx context.Context, id int) (*domain.Reservation, error) {
+	query := `SELECT id, user_id, book_id, status, reserved_at, due_date
+			FROM reservations
+			WHERE id=$1`
+
+	reservation := &domain.Reservation{}
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&reservation.ID, &reservation.UserID, &reservation.BookID,
+		&reservation.Status, &reservation.ReservedAt, &reservation.DueDate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return reservation, nil
+}
+
 func (r *ReservationRepository) ReservationGetUserByID(ctx context.Context, userID int) ([]*domain.ReservationWithUser, error) {
 	query := `SELECT r.id, r.user_id, r.book_id, r.status, r.reserved_at, r.due_date, u.first_name, u.last_name
 			FROM reservations AS r

@@ -51,7 +51,7 @@ services:
       - "8080:8080"
     depends_on:
       redis:
-        condition: service_healtyh
+        condition: service_healthy
       postgres:
         condition: service_healthy
     dns:

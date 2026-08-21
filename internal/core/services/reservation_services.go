@@ -44,6 +44,14 @@ func (s *ReservationServices) ReservationUpdate(ctx context.Context, id int, sta
 	return &ReworkReservation, nil
 }
 
+func (s *ReservationServices) ReservationGetByID(ctx context.Context, id int) (*domain.Reservation, error) {
+	reservation, err := s.repo.ReservationGetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return reservation, nil
+}
+
 func (s *ReservationServices) ReservationGetByUserID(ctx context.Context, id int) ([]*domain.ReservationWithUser, error) {
 	reservations, err := s.repo.ReservationGetUserByID(ctx, id)
 	if err != nil {

@@ -26,6 +26,7 @@ func (s *UserServices) UserRegister(ctx context.Context, ad string, soyad string
 		Phone:        phone,
 		Email:        email,
 		PasswordHash: string(hash),
+		Role:         "user",
 	}
 	err = s.repo.Create(ctx, &yeniKullanici)
 	if err != nil {

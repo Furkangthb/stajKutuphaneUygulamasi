@@ -22,7 +22,6 @@ type RegisterRequest struct {
 	Phone     string `json:"phone" binding:"required"`
 	Email     string `json:"email" binding:"required"`
 	Password  string `json:"password" binding:"required"`
-	Role      string `json:"role" binding:"required"`
 }
 
 func (h *UserHandlers) UserRegister(c *gin.Context) {
@@ -34,7 +33,7 @@ func (h *UserHandlers) UserRegister(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	user, err := h.userService.UserRegister(ctx, istek.FirstName, istek.LastName, istek.Phone, istek.Email, istek.Password, istek.Role)
+	user, err := h.userService.UserRegister(ctx, istek.FirstName, istek.LastName, istek.Phone, istek.Email, istek.Password)
 	if err != nil {
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
@@ -119,6 +118,13 @@ func (h *UserHandlers) UserUpdate(c *gin.Context) {
 		})
 		return
 	}
+	tokenUserID := c.GetInt("user_id")
+	tokenRole := c.GetString("role")
+
+	if tokenRole != "admin" && int64(tokenUserID) != id {
+		c.JSON(http.StatusForbidden, gin.H{"Hata": "sadece kendi bilgilerinizi guncelleyebilirsiniz"})
+		return
+	}
 	var rework UserRework
 	if err := c.ShouldBindJSON(&rework); err != nil {
 		c.JSON(400, gin.H{
@@ -126,9 +132,19 @@ func (h *UserHandlers) UserUpdate(c *gin.Context) {
 		})
 		return
 	}
-
 	ctx := c.Request.Context()
-	user, err := h.userService.UserUpdate(ctx, int(id), rework.FirstName, rework.LastName, rework.Email, rework.Role)
+	newRole := rework.Role
+	if tokenRole != "admin" {
+		currentUser, err := h.userService.UserGet(ctx, id)
+		if err != nil {
+			c.JSON(404, gin.H{
+				"Hata": "kullanici bulunamadi",
+			})
+			return
+		}
+		newRole = currentUser.Role
+	}
+	user, err := h.userService.UserUpdate(ctx, int(id), rework.FirstName, rework.LastName, rework.Email, newRole)
 	if err != nil {
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
