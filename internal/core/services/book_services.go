@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
@@ -27,7 +28,7 @@ func (s *BookServices) BookAdd(ctx context.Context, title string, author string,
 	}
 	err := s.repo.BookCreate(ctx, &yeniKitap)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("yeni kitap olusturalamadi")
 	}
 	return &yeniKitap, nil
 }
@@ -35,7 +36,7 @@ func (s *BookServices) BookAdd(ctx context.Context, title string, author string,
 func (s *BookServices) BookGet(ctx context.Context, id int64) (*domain.Book, error) {
 	book, err := s.repo.BookGetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("kitap getirelemedi")
 	}
 	return book, nil
 }
@@ -43,7 +44,7 @@ func (s *BookServices) BookGet(ctx context.Context, id int64) (*domain.Book, err
 func (s *BookServices) BookDelete(ctx context.Context, id int64) error {
 	err := s.repo.BookDelete(ctx, id)
 	if err != nil {
-		return err
+		return errors.New("kitap silinemedi")
 	}
 	return nil
 
@@ -62,7 +63,7 @@ func (s *BookServices) BookUpdate(ctx context.Context, id int64, title string, a
 
 	err := s.repo.BookUpdate(ctx, &NewBook)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("kitap güncellenemedi")
 
 	}
 	return &NewBook, nil
@@ -78,7 +79,7 @@ func (s *BookServices) BookList(ctx context.Context, page int, page_size int) ([
 	offset := (page - 1) * page_size
 	book, err := s.repo.BookList(ctx, page_size, offset)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("kitap listelemedi")
 	}
 	return book, nil
 

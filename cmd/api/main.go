@@ -32,7 +32,12 @@ func main() {
 	authService := services.NewAuthServices(authRepo, userRepo, os.Getenv("JWT_SECRET"))
 	authHandler := handlers.NewAuthHandlers(authService)
 
+	chatService := services.NewChatServices(os.Getenv("GEMINI_API_KEY"))
+	chatHandlers := handlers.NewChatHandlers(chatService)
+
 	r := gin.Default()
+
+	r.POST("/api/chat", chatHandlers.Chat)
 
 	r.POST("/api/users/register", userHandlers.UserRegister)
 	r.POST("/api/auth/login", authHandler.Login)

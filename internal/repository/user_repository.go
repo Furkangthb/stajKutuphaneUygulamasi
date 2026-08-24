@@ -46,7 +46,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id int64) (*domain.User, e
 
 	user := &domain.User{}
 
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&user.ID, &user.FirstName, &user.LastName, &user.Phone, &user.PasswordHash, &user.Role)
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&user.ID, &user.FirstName, &user.LastName, &user.PasswordHash, &user.Role)
 	if err != nil {
 		return nil, err
 	}

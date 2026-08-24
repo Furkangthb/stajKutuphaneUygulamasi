@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
 	"golang.org/x/crypto/bcrypt"
@@ -18,7 +19,7 @@ func NewUserServices(repo domain.UserRepository) *UserServices {
 func (s *UserServices) UserRegister(ctx context.Context, ad string, soyad string, phone string, email string, sifre string) (*domain.User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(sifre), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("sifre hashlenemedi")
 	}
 	yeniKullanici := domain.User{
 		FirstName:    ad,
@@ -30,7 +31,7 @@ func (s *UserServices) UserRegister(ctx context.Context, ad string, soyad string
 	}
 	err = s.repo.Create(ctx, &yeniKullanici)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("kullanici olusturalami")
 	}
 	return &yeniKullanici, nil
 }
@@ -42,7 +43,7 @@ func (s *UserServices) UserLogin(ctx context.Context, email string, password str
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	if err != nil {
-		return nil, err
+		return nil, errors.New("sifre yada email hatali")
 	}
 	return user, nil
 }
@@ -50,7 +51,7 @@ func (s *UserServices) UserLogin(ctx context.Context, email string, password str
 func (s *UserServices) UserDelete(ctx context.Context, id int64) error {
 	err := s.repo.Delete(ctx, id)
 	if err != nil {
-		return err
+		return errors.New("kullanici silinemedi")
 	}
 	return nil
 }
@@ -58,7 +59,7 @@ func (s *UserServices) UserDelete(ctx context.Context, id int64) error {
 func (s *UserServices) UserGet(ctx context.Context, id int64) (*domain.User, error) {
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("kullanici getirilemedi")
 	}
 	return user, nil
 }
@@ -73,7 +74,7 @@ func (s *UserServices) UserUpdate(ctx context.Context, id int, first_name string
 	}
 	err := s.repo.Update(ctx, &NewUser)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("kullanici guncellenmedi")
 	}
 	return &NewUser, nil
 }
@@ -88,7 +89,7 @@ func (s *UserServices) UserList(ctx context.Context, page int, page_size int) ([
 	offset := (page - 1) * page_size
 	users, err := s.repo.List(ctx, page_size, offset)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("kullanicilar listelenmedi")
 	}
 	return users, nil
 }

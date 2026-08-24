@@ -66,6 +66,7 @@ services:
       - POSTGRES_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-stajKutuphanePostgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}?sslmode=disable
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     networks:
       stajKutuphaneNetwork:
         ipv4_address: 172.20.0.4
