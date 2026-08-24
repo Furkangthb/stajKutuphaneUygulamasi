@@ -84,3 +84,12 @@ func (s *BookServices) BookList(ctx context.Context, page int, page_size int) ([
 	return book, nil
 
 }
+
+func (s *BookServices) BookSearch(ctx context.Context, keywords []string, limit int) ([]*domain.Book, error) {
+	books, err := s.repo.BookSearch(ctx, limit, keywords)
+	if err != nil {
+		return nil, err
+	}
+	return books, nil
+
+}

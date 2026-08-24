@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
 )
@@ -16,19 +17,56 @@ func NewResservationRepository(db *sql.DB) *ReservationRepository {
 }
 
 func (r *ReservationRepository) ReservationCreate(ctx context.Context, reservation *domain.Reservation) error {
-	query := `INSERT INTO reservations( user_id,book_id,status,due_date) VALUES($1,$2,$3,$4) RETURNING id`
-	err := r.db.QueryRowContext(ctx, query, reservation.UserID, reservation.BookID, reservation.Status, reservation.DueDate).Scan(&reservation.ID)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	return nil
+	defer tx.Rollback()
+
+	var stockCount int
+	err = tx.QueryRowContext(ctx, `SELECT stock_count FROM books WHERE id=$1 FOR UPDATE`, reservation.BookID).Scan(&stockCount)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("kitap bulunamadi")
+		}
+		return err
+	}
+	if stockCount <= 0 {
+		return errors.New("kitap stokta yok")
+	}
+
+	query := `INSERT INTO reservations( user_id,book_id,status,due_date) VALUES($1,$2,$3,$4) RETURNING id`
+	err = tx.QueryRowContext(ctx, query, reservation.UserID, reservation.BookID, reservation.Status, reservation.DueDate).Scan(&reservation.ID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, `UPDATE books SET stock_count = stock_count - 1 WHERE id=$1`, reservation.BookID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (r *ReservationRepository) ReservationUpdate(ctx context.Context, reservation *domain.Reservation) error {
-	query := `UPDATE reservations
-			SET status=$1
-			WHERE id=$2`
-	result, err := r.db.ExecContext(ctx, query, reservation.Status, reservation.ID)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var mevcutStatus string
+	var bookID int
+	err = tx.QueryRowContext(ctx, `SELECT book_id, status FROM reservations WHERE id=$1 FOR UPDATE`, reservation.ID).Scan(&bookID, &mevcutStatus)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sql.ErrNoRows
+		}
+		return err
+	}
+
+	result, err := tx.ExecContext(ctx, `UPDATE reservations SET status=$1 WHERE id=$2`, reservation.Status, reservation.ID)
 	if err != nil {
 		return err
 	}
@@ -39,7 +77,16 @@ func (r *ReservationRepository) ReservationUpdate(ctx context.Context, reservati
 	if rowAffected == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+
+	yeniStatusIadeMi := reservation.Status == "returned" || reservation.Status == "cancelled"
+	if mevcutStatus == "active" && yeniStatusIadeMi {
+		_, err = tx.ExecContext(ctx, `UPDATE books SET stock_count = stock_count + 1 WHERE id=$1`, bookID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (r *ReservationRepository) ReservationGetByID(ctx context.Context, id int) (*domain.Reservation, error) {

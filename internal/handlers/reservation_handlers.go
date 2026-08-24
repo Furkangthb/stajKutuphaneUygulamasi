@@ -25,17 +25,14 @@ type ReservationCreat struct {
 func (h *ReservationHandlers) ReservationCreate(c *gin.Context) {
 	var reserve ReservationCreat
 	if err := c.ShouldBindJSON(&reserve); err != nil {
-		c.JSON(400, gin.H{
-			"Hata": err.Error(),
-		})
+		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
 	ctx := c.Request.Context()
 	reservation, err := h.reserService.ReservationCreate(ctx, reserve.UserID, reserve.BookID, reserve.Status)
 	if err != nil {
-		c.JSON(400, gin.H{
-			"Hata": err.Error(),
-		})
+
+		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
 	c.JSON(201, reservation)
