@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
@@ -27,6 +28,7 @@ func (s *ReservationServices) ReservationCreate(ctx context.Context, userId int,
 	}
 	err := s.repo.ReservationCreate(ctx, &newReservation)
 	if err != nil {
+		fmt.Println("REZERVASYON DB HATASI:", err)
 		return nil, errors.New("rezervasyon yapilamadi")
 	}
 	return &newReservation, nil
@@ -53,7 +55,15 @@ func (s *ReservationServices) ReservationGetByID(ctx context.Context, id int) (*
 	return reservation, nil
 }
 
-func (s *ReservationServices) ReservationGetByUserID(ctx context.Context, id int) ([]*domain.ReservationWithUser, error) {
+func (s *ReservationServices) ReservationListAll(ctx context.Context) ([]*domain.ReservationFull, error) {
+	reservations, err := s.repo.ReservationGetAll(ctx)
+	if err != nil {
+		return nil, errors.New("rezervasyonlar getirilemedi")
+	}
+	return reservations, nil
+}
+
+func (s *ReservationServices) ReservationGetByUserID(ctx context.Context, id int) ([]*domain.ReservationFull, error) {
 	reservations, err := s.repo.ReservationGetUserByID(ctx, id)
 	if err != nil {
 		return nil, errors.New("reservasyonlar getiremedi")

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
@@ -17,17 +18,18 @@ func NewBookServices(repo *repository.BookRepository) *BookServices {
 	return &BookServices{repo: repo}
 }
 
-func (s *BookServices) BookAdd(ctx context.Context, title string, author string, genre string, publishDate time.Time, description string, stockCount int) (*domain.Book, error) {
+func (s *BookServices) BookAdd(ctx context.Context, isbn string, title string, author string, genre string, publishDate time.Time, description string) (*domain.Book, error) {
 	yeniKitap := domain.Book{
+		ISBN:        isbn,
 		Title:       title,
 		Author:      author,
 		Genre:       genre,
 		PublishDate: publishDate,
 		Description: description,
-		StockCount:  stockCount,
 	}
 	err := s.repo.BookCreate(ctx, &yeniKitap)
 	if err != nil {
+		fmt.Println("KİTAP EKLENİRKEN DB HATASI:", err)
 		return nil, errors.New("yeni kitap olusturalamadi")
 	}
 	return &yeniKitap, nil
@@ -50,15 +52,15 @@ func (s *BookServices) BookDelete(ctx context.Context, id int64) error {
 
 }
 
-func (s *BookServices) BookUpdate(ctx context.Context, id int64, title string, author string, genre string, publich_date time.Time, description string, stock_count int) (*domain.Book, error) {
+func (s *BookServices) BookUpdate(ctx context.Context, id int64, isbn string, title string, author string, genre string, publich_date time.Time, description string) (*domain.Book, error) {
 	NewBook := domain.Book{
 		ID:          int(id),
+		ISBN:        isbn,
 		Title:       title,
 		Author:      author,
 		Genre:       genre,
 		PublishDate: publich_date,
 		Description: description,
-		StockCount:  stock_count,
 	}
 
 	err := s.repo.BookUpdate(ctx, &NewBook)

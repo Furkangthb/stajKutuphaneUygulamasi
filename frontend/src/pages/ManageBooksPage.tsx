@@ -1,14 +1,26 @@
 import { useEffect, useState } from "react";
-import { api, type Book } from "../api";
+import { api } from "../api";
+
+// Backend'deki Book modelinize tam uyumlu arayüz (api.ts'de de güncellemeyi unutmayın)
+export interface Book {
+  id: number;
+  isbn: string;
+  title: string;
+  author: string;
+  genre: string;
+  publish_date: string; // Backend time.Time beklediği için string (ISO formatı) olacak
+  description: string;
+  available?: boolean;
+}
 
 const empty: Omit<Book, "id"> = {
   title: "",
   author: "",
   isbn: "",
   genre: "",
-  published_year: undefined,
-  available: true,
+  publish_date: "", 
   description: "",
+  available: true,
 };
 
 export default function ManageBooksPage() {
@@ -29,7 +41,17 @@ export default function ManageBooksPage() {
   const load = () => {
     setLoading(true);
     api.getBooks()
-      .then(setBooks)
+      .then((res: any) => {
+        let dataList: any[] = [];
+        if (Array.isArray(res)) {
+            dataList = res;
+        } else if (res && Array.isArray(res.data)) {
+            dataList = res.data;
+        } else if (res && Array.isArray(res.books)) {
+            dataList = res.books;
+        }
+        setBooks(dataList);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   };
@@ -45,7 +67,20 @@ export default function ManageBooksPage() {
   };
 
   const openEdit = (book: Book) => {
-    setForm({ title: book.title, author: book.author, isbn: book.isbn ?? "", genre: book.genre ?? "", published_year: book.published_year, available: book.available, description: book.description ?? "" });
+    if (!book) return;
+    
+    // Backend'den gelen 2026-08-25T10:00:00Z formatındaki tarihi input type="date" için YYYY-MM-DD'ye çeviriyoruz
+    const dateStr = book.publish_date ? book.publish_date.split("T")[0] : "";
+
+    setForm({ 
+        title: book.title || "", 
+        author: book.author || "", 
+        isbn: book.isbn || "", 
+        genre: book.genre || "", 
+        publish_date: dateStr, 
+        available: book.available ?? true, 
+        description: book.description || "" 
+    });
     setModal({ open: true, editing: book });
   };
 
@@ -53,13 +88,21 @@ export default function ManageBooksPage() {
     e.preventDefault();
     setSaving(true);
     try {
+      // Go (Gin) backend'inin time.Time'ı hatasız parse edebilmesi için tarihi ISO 8601 formatına çeviriyoruz
+      const payload = {
+          ...form,
+          // Eğer tarih seçildiyse sonuna saat ekleyip ISO yap, yoksa şu anki tarihi kullan
+          publish_date: form.publish_date ? new Date(form.publish_date).toISOString() : new Date().toISOString()
+      };
+
       if (modal.editing) {
-        const updated = await api.updateBook(modal.editing.id, form);
-        setBooks((bs) => bs.map((b) => (b.id === modal.editing!.id ? updated : b)));
+        const updated = await api.updateBook(modal.editing.id, payload as any);
+        const updatedBook = { ...modal.editing, ...updated } as Book;
+        setBooks((bs) => (Array.isArray(bs) ? bs : []).map((b) => (b?.id === modal.editing!.id ? updatedBook : b)));
         showToast("Kitap güncellendi");
       } else {
-        const added = await api.addBook(form);
-        setBooks((bs) => [added, ...bs]);
+        const added = await api.addBook(payload as any);
+        setBooks((bs) => [added, ...(Array.isArray(bs) ? bs : [])]);
         showToast("Kitap eklendi");
       }
       setModal({ open: false, editing: null });
@@ -71,11 +114,11 @@ export default function ManageBooksPage() {
   };
 
   const del = async (book: Book) => {
-    if (!confirm(`"${book.title}" kitabını silmek istediğinizden emin misiniz?`)) return;
+    if (!book || !confirm(`"${book.title || 'Bu kitabı'}" silmek istediğinizden emin misiniz?`)) return;
     setDeleting(book.id);
     try {
       await api.deleteBook(book.id);
-      setBooks((bs) => bs.filter((b) => b.id !== book.id));
+      setBooks((bs) => (Array.isArray(bs) ? bs : []).filter((b) => b?.id !== book.id));
       showToast("Kitap silindi");
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "Silme başarısız");
@@ -84,11 +127,16 @@ export default function ManageBooksPage() {
     }
   };
 
-  const filtered = books.filter(
-    (b) =>
-      b.title.toLowerCase().includes(search.toLowerCase()) ||
-      b.author.toLowerCase().includes(search.toLowerCase())
-  );
+  const safeBooks = Array.isArray(books) ? books : [];
+  
+  const filtered = safeBooks.filter((b) => {
+      if (!b) return false;
+      const title = b.title || "";
+      const author = b.author || "";
+      const searchTerm = search || "";
+      return title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             author.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   return (
     <div className="h-full flex flex-col">
@@ -98,7 +146,7 @@ export default function ManageBooksPage() {
             Kitap Yönetimi
           </h1>
           <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-            {books.length} kitap
+            {safeBooks.length} kitap
           </p>
         </div>
         <button
@@ -136,7 +184,7 @@ export default function ManageBooksPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["Başlık", "Yazar", "Tür", "Yıl", "Durum", ""].map((h) => (
+                  {["Başlık", "Yazar", "Tür", "Yayın Tarihi", "Durum", ""].map((h) => (
                     <th
                       key={h}
                       className="px-5 py-3 text-left font-semibold text-xs uppercase tracking-wider"
@@ -148,22 +196,26 @@ export default function ManageBooksPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((book, i) => (
+                {filtered.map((book, i) => {
+                  if (!book) return null;
+                  return (
                   <tr
-                    key={book.id}
+                    key={book.id || i}
                     style={{ borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none" }}
                     className="hover:bg-[var(--muted)] transition-colors duration-100"
                   >
-                    <td className="px-5 py-3 font-semibold" style={{ color: "var(--foreground)" }}>{book.title}</td>
-                    <td className="px-5 py-3" style={{ color: "var(--muted-foreground)" }}>{book.author}</td>
-                    <td className="px-5 py-3" style={{ color: "var(--muted-foreground)" }}>{book.genre ?? "—"}</td>
-                    <td className="px-5 py-3" style={{ color: "var(--muted-foreground)" }}>{book.published_year ?? "—"}</td>
+                    <td className="px-5 py-3 font-semibold" style={{ color: "var(--foreground)" }}>{book.title || "İsimsiz"}</td>
+                    <td className="px-5 py-3" style={{ color: "var(--muted-foreground)" }}>{book.author || "—"}</td>
+                    <td className="px-5 py-3" style={{ color: "var(--muted-foreground)" }}>{book.genre || "—"}</td>
+                    <td className="px-5 py-3" style={{ color: "var(--muted-foreground)" }}>
+                      {book.publish_date ? new Date(book.publish_date).toLocaleDateString("tr-TR") : "—"}
+                    </td>
                     <td className="px-5 py-3">
                       <span
                         className="px-2 py-0.5 rounded-full text-xs font-bold"
-                        style={{ backgroundColor: book.available ? "#D1FAE5" : "#FEE2E2", color: book.available ? "#065F46" : "#991B1B" }}
+                        style={{ backgroundColor: book.available !== false ? "#D1FAE5" : "#FEE2E2", color: book.available !== false ? "#065F46" : "#991B1B" }}
                       >
-                        {book.available ? "Mevcut" : "Dolu"}
+                        {book.available !== false ? "Mevcut" : "Dolu"}
                       </span>
                     </td>
                     <td className="px-5 py-3">
@@ -186,7 +238,7 @@ export default function ManageBooksPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
             {filtered.length === 0 && (
@@ -207,11 +259,24 @@ export default function ManageBooksPage() {
             <FormField label="Başlık *" value={form.title} onChange={(v) => setForm((f) => ({ ...f, title: v }))} required />
             <FormField label="Yazar *" value={form.author} onChange={(v) => setForm((f) => ({ ...f, author: v }))} required />
             <div className="grid grid-cols-2 gap-4">
-              <FormField label="ISBN" value={form.isbn ?? ""} onChange={(v) => setForm((f) => ({ ...f, isbn: v }))} />
-              <FormField label="Tür" value={form.genre ?? ""} onChange={(v) => setForm((f) => ({ ...f, genre: v }))} />
+              <FormField label="ISBN *" value={form.isbn} onChange={(v) => setForm((f) => ({ ...f, isbn: v }))} required />
+              <FormField label="Tür *" value={form.genre} onChange={(v) => setForm((f) => ({ ...f, genre: v }))} required />
             </div>
+            
+            {/* Tarih Input'u Değiştirildi */}
             <div className="grid grid-cols-2 gap-4">
-              <FormField label="Yayın Yılı" type="number" value={String(form.published_year ?? "")} onChange={(v) => setForm((f) => ({ ...f, published_year: v ? Number(v) : undefined }))} />
+              <div>
+                <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--foreground)" }}>Yayın Tarihi *</label>
+                <input
+                  type="date"
+                  required
+                  value={form.publish_date}
+                  onChange={(e) => setForm((f) => ({ ...f, publish_date: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                  style={{ backgroundColor: "var(--muted)", border: "1.5px solid var(--border)", color: "var(--foreground)" }}
+                />
+              </div>
+              
               <div>
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--foreground)" }}>Durum</label>
                 <select
@@ -226,10 +291,11 @@ export default function ManageBooksPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--foreground)" }}>Açıklama</label>
+              <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--foreground)" }}>Açıklama *</label>
               <textarea
-                value={form.description ?? ""}
+                value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                required
                 rows={3}
                 className="w-full px-4 py-2.5 rounded-xl text-sm outline-none resize-none"
                 style={{ backgroundColor: "var(--muted)", border: "1.5px solid var(--border)", color: "var(--foreground)" }}

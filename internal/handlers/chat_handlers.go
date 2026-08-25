@@ -24,21 +24,17 @@ func (h *ChatHandlers) Chat(c *gin.Context) {
 	var istek ChatRequist
 
 	if err := c.ShouldBindJSON(&istek); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"Hata": err.Error(),
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"Hata": err.Error()})
 		return
 	}
 
-	cevap, err := h.chatServices.Sohbet(c.Request.Context(), istek.Message)
+	userID := c.GetInt("user_id")
+
+	cevap, err := h.chatServices.Sohbet(c.Request.Context(), userID, istek.Message)
 	if err != nil {
 		log.Printf("Gemini Sohbet Hatası: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"Hata": err.Error(),
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"Hata": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"Cevap": cevap,
-	})
+	c.JSON(http.StatusOK, gin.H{"Cevap": cevap})
 }

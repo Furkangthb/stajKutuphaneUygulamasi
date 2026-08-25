@@ -18,10 +18,11 @@ type Chatservices struct {
 	apikey       string
 	httpsClient  *http.Client
 	bookServices *BookServices
+	chatRepo     domain.ChatRepository
 }
 
-func NewChatServices(apikey string, bookServices *BookServices) *Chatservices {
-	return &Chatservices{apikey: apikey, httpsClient: &http.Client{Timeout: 60 * time.Second}, bookServices: bookServices}
+func NewChatServices(apikey string, bookServices *BookServices, chatRepo domain.ChatRepository) *Chatservices {
+	return &Chatservices{apikey: apikey, httpsClient: &http.Client{Timeout: 60 * time.Second}, bookServices: bookServices, chatRepo: chatRepo}
 }
 
 const sistemTalimati = `Sen bir kütüphane uygulamasının yardımcı botusun.Sorulara türkçe cevap verirsin.Resmi bir dilde konuşursun.Bu uygulama ile alakasız konuları,bu konu hakkımda bilgim yok diyerek cevap verirsin.Asla iç düşünce sürecini, analizlerini veya adımlarını (Chain of Thought) çıktı olarak verme. İngilizce açıklama yapma. Sadece ve sadece kullanıcıya vereceğin nihai Türkçe cevabı tek bir metin halinde üret.
@@ -54,7 +55,7 @@ type geminiYanit struct {
 	} `json:"error"`
 }
 
-func (s Chatservices) Sohbet(ctx context.Context, kullaniciMesaji string) (string, error) {
+func (s Chatservices) Sohbet(ctx context.Context, userID int, kullaniciMesaji string) (string, error) {
 	if s.apikey == "" {
 		return "", errors.New("api anahtari bos")
 	}
@@ -67,10 +68,12 @@ func (s Chatservices) Sohbet(ctx context.Context, kullaniciMesaji string) (strin
 	aramaBulamadi := err != nil || len(ilgiliKitaplar) == 0
 
 	if aramaBulamadi {
-		ilgiliKitaplar, err = s.bookServices.BookList(ctx, 20, 0)
+		ilgiliKitaplar, err = s.bookServices.BookList(ctx, 1, 20)
 		if err != nil {
+			fmt.Printf("BookList HATA: %v\n", err)
 			ilgiliKitaplar = nil
 		}
+		fmt.Printf("ilgiliKitaplar sayisi: %d\n", len(ilgiliKitaplar))
 	}
 
 	prompMetni := kullaniciMesaji
@@ -84,16 +87,35 @@ func (s Chatservices) Sohbet(ctx context.Context, kullaniciMesaji string) (strin
 		}
 	}
 
+	var gecmisIcerikler []geminiIcerik
+	if s.chatRepo != nil {
+		gecmis, err := s.chatRepo.GetHistory(ctx, userID, 10)
+		if err != nil {
+			fmt.Printf("chat gecmisi okunamadi: %v\n", err)
+		} else {
+			for i := len(gecmis) - 1; i >= 0; i-- {
+				rol := "user"
+				if gecmis[i].Role == "assistant" {
+					rol = "model"
+				}
+				gecmisIcerikler = append(gecmisIcerikler, geminiIcerik{
+					Role:  rol,
+					Parts: []geminiPart{{Text: gecmis[i].Message}},
+				})
+			}
+		}
+	}
+
+	tumIcerikler := append(gecmisIcerikler, geminiIcerik{
+		Role:  "user",
+		Parts: []geminiPart{{Text: prompMetni}},
+	})
+
 	istek := geminiIstek{
 		SystemInstruction: geminiIcerik{
 			Parts: []geminiPart{{Text: sistemTalimati}},
 		},
-		Contents: []geminiIcerik{
-			{
-				Role:  "user",
-				Parts: []geminiPart{{Text: prompMetni}},
-			},
-		},
+		Contents: tumIcerikler,
 	}
 	body, err := json.Marshal(istek)
 	if err != nil {
@@ -122,14 +144,24 @@ func (s Chatservices) Sohbet(ctx context.Context, kullaniciMesaji string) (strin
 		return "", fmt.Errorf("yanit parse edilemedi")
 	}
 	if yanit.Error != nil {
-
 		return "", fmt.Errorf("gemini api hatasi: %s", yanit.Error.Message)
-
 	}
 	if len(yanit.Candidates) == 0 || len(yanit.Candidates[0].Content.Parts) == 0 {
 		return "", errors.New("geminiden bos yanit geldi")
 	}
-	return yanit.Candidates[0].Content.Parts[0].Text, nil
+
+	cevapMetni := yanit.Candidates[0].Content.Parts[0].Text
+
+	if s.chatRepo != nil {
+		if err := s.chatRepo.Save(ctx, domain.ChatMessage{UserID: userID, Role: "user", Message: kullaniciMesaji}); err != nil {
+			fmt.Printf("chat gecmisi kaydedilemedi (user): %v\n", err)
+		}
+		if err := s.chatRepo.Save(ctx, domain.ChatMessage{UserID: userID, Role: "assistant", Message: cevapMetni}); err != nil {
+			fmt.Printf("chat gecmisi kaydedilemedi (assistant): %v\n", err)
+		}
+	}
+
+	return cevapMetni, nil
 }
 
 func kelimeCikar(mesaj string) []string {
@@ -155,8 +187,8 @@ func kelimeCikar(mesaj string) []string {
 func kitaplariMetneCevir(kitaplar []*domain.Book) string {
 	var satirlar []string
 	for _, k := range kitaplar {
-		satirlar = append(satirlar, fmt.Sprintf("- %s / %s / Tur: %s / Stok: %d",
-			k.Title, k.Author, k.Genre, k.StockCount))
+		satirlar = append(satirlar, fmt.Sprintf("- %s / %s / Tur: %s ",
+			k.Title, k.Author, k.Genre))
 	}
 	return strings.Join(satirlar, "\n")
 }

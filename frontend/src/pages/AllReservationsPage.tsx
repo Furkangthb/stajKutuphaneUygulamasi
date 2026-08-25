@@ -1,27 +1,27 @@
 import { useEffect, useState } from "react";
-import { api, type Reservation } from "../api";
+import { api, type ReservationFull, type Reservation } from "../api";
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: "Bekliyor",
   active: "Aktif",
-  returned: "İade Edildi",
-  cancelled: "İptal",
+  completed: "Tamamlandı",
+  cancelled: "İptal Edildi",
+  expired: "Süresi Doldu",
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  pending: { bg: "#FEF3C7", text: "#92400E" },
   active: { bg: "#D1FAE5", text: "#065F46" },
-  returned: { bg: "#DBEAFE", text: "#1E40AF" },
+  completed: { bg: "#DBEAFE", text: "#1E40AF" },
   cancelled: { bg: "#FEE2E2", text: "#991B1B" },
+  expired: { bg: "#FEF3C7", text: "#92400E" },
 };
 
-const STATUS_FILTERS = ["Tümü", "Bekliyor", "Aktif", "İade Edildi", "İptal"];
+const STATUS_FILTERS = ["Tümü", "Aktif", "Tamamlandı", "İptal Edildi", "Süresi Doldu"];
 const STATUS_MAP: Record<string, string> = {
-  "Bekliyor": "pending", "Aktif": "active", "İade Edildi": "returned", "İptal": "cancelled",
+  "Aktif": "active", "Tamamlandı": "completed", "İptal Edildi": "cancelled", "Süresi Doldu": "expired",
 };
 
 export default function AllReservationsPage() {
-  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [reservations, setReservations] = useState<ReservationFull[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("Tümü");
@@ -30,17 +30,13 @@ export default function AllReservationsPage() {
   const [toast, setToast] = useState("");
 
   useEffect(() => {
-    // Admin: fetch all reservations via a listing endpoint
-    // Backend route: GET /api/reservation/:id (user-based)
-    // For admin "all reservations" we use a conventional /api/reservations endpoint
-    fetch("/api/reservations", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(await res.text());
-        return res.json();
+    // Backend API çağrısı, api.ts üzerinden güvenli bir şekilde yapılıyor
+    api.getAllReservations()
+      .then((res: any) => {
+        // Gelen veriyi her ihtimale karşı zorla dizi yapıyoruz
+        const dataList = Array.isArray(res) ? res : (res?.data || res?.reservations || []);
+        setReservations(dataList || []);
       })
-      .then(setReservations)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -53,8 +49,9 @@ export default function AllReservationsPage() {
   const updateStatus = async (id: number, status: Reservation["status"]) => {
     setUpdating(id);
     try {
-      const updated = await api.updateReservation(id, { status });
-      setReservations((rs) => rs.map((r) => (r.id === id ? { ...r, ...updated } : r)));
+      await api.updateReservation(id, { status });
+      // Güncelleme başarılıysa listedeki durumu (state) değiştiriyoruz
+      setReservations((rs) => (rs || []).map((r) => (r?.id === id ? { ...r, status } : r)));
       showToast("Rezervasyon güncellendi");
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "Güncelleme başarısız");
@@ -63,20 +60,29 @@ export default function AllReservationsPage() {
     }
   };
 
-  const filtered = reservations.filter((r) => {
+  const safeReservations = Array.isArray(reservations) ? reservations : [];
+
+  const filtered = safeReservations.filter((r) => {
+    if (!r) return false;
     const matchStatus = statusFilter === "Tümü" || r.status === STATUS_MAP[statusFilter];
+
+    const bookTitle = r.book_title || "";
+    const userName = `${r.first_name || ""} ${r.last_name || ""}`.trim();
+    const searchTerm = search.toLowerCase();
+
     const matchSearch =
       search === "" ||
-      r.book?.title?.toLowerCase().includes(search.toLowerCase()) ||
-      r.user?.username?.toLowerCase().includes(search.toLowerCase());
+      bookTitle.toLowerCase().includes(searchTerm) ||
+      userName.toLowerCase().includes(searchTerm);
+
     return matchStatus && matchSearch;
   });
 
   const counts = {
-    total: reservations.length,
-    active: reservations.filter((r) => r.status === "active").length,
-    pending: reservations.filter((r) => r.status === "pending").length,
-    returned: reservations.filter((r) => r.status === "returned").length,
+    total: safeReservations.length,
+    active: safeReservations.filter((r) => r?.status === "active").length,
+    completed: safeReservations.filter((r) => r?.status === "completed").length,
+    cancelled: safeReservations.filter((r) => r?.status === "cancelled").length,
   };
 
   return (
@@ -86,7 +92,7 @@ export default function AllReservationsPage() {
           Tüm Rezervasyonlar
         </h1>
         <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-          {reservations.length} rezervasyon
+          {safeReservations.length} rezervasyon
         </p>
       </div>
 
@@ -95,8 +101,8 @@ export default function AllReservationsPage() {
         {[
           { label: "Toplam", value: counts.total, bg: "#F8F7F3", text: "var(--foreground)" },
           { label: "Aktif", value: counts.active, bg: "#D1FAE5", text: "#065F46" },
-          { label: "Bekleyen", value: counts.pending, bg: "#FEF3C7", text: "#92400E" },
-          { label: "İade", value: counts.returned, bg: "#DBEAFE", text: "#1E40AF" },
+          { label: "Tamamlandı", value: counts.completed, bg: "#DBEAFE", text: "#1E40AF" },
+          { label: "İptal Edilen", value: counts.cancelled, bg: "#FEE2E2", text: "#991B1B" },
         ].map(({ label, value, bg, text }) => (
           <div key={label} className="rounded-xl px-5 py-4" style={{ backgroundColor: bg, border: "1px solid var(--border)" }}>
             <p className="font-display text-2xl" style={{ color: text }}>{value}</p>
@@ -104,7 +110,6 @@ export default function AllReservationsPage() {
           </div>
         ))}
       </div>
-
       {/* Filters */}
       <div className="px-8 pb-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
@@ -155,7 +160,8 @@ export default function AllReservationsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["#", "Kitap", "Kullanıcı", "Durum", "Rezervasyon Tarihi", ""].map((h) => (
+                  {/* BAŞLIKLARA "İade Tarihi" EKLENDİ */}
+                  {["#", "Kitap", "Kullanıcı", "Durum", "İşlem Tarihi", "İade Tarihi", ""].map((h) => (
                     <th key={h} className="px-5 py-3 text-left font-semibold text-xs uppercase tracking-wider" style={{ color: "var(--muted-foreground)" }}>
                       {h}
                     </th>
@@ -164,16 +170,22 @@ export default function AllReservationsPage() {
               </thead>
               <tbody>
                 {filtered.map((r, i) => {
+                  if (!r) return null;
                   const sc = STATUS_COLORS[r.status] ?? { bg: "#F3F4F6", text: "#6B7280" };
+                  const fullName = `${r.first_name || ""} ${r.last_name || ""}`.trim() || `Kullanıcı #${r.user_id}`;
+                  
+                  // GECİKME KONTROLÜ: Tarih geçmiş mi VE kitap hala "Aktif" durumda mı?
+                  const isOverdue = r.due_date && new Date(r.due_date) < new Date() && r.status === "active";
+                  
                   return (
                     <tr
-                      key={r.id}
+                      key={r.id || i}
                       style={{ borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none" }}
                       className="transition-colors duration-100 hover:bg-[var(--muted)]"
                     >
                       <td className="px-5 py-3 font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>#{r.id}</td>
                       <td className="px-5 py-3 font-semibold" style={{ color: "var(--foreground)" }}>
-                        {r.book?.title ?? `Kitap #${r.book_id}`}
+                        {r.book_title || `Kitap #${r.book_id}`}
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
@@ -181,21 +193,40 @@ export default function AllReservationsPage() {
                             className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold uppercase shrink-0"
                             style={{ backgroundColor: "var(--secondary)", color: "var(--secondary-foreground)" }}
                           >
-                            {r.user?.username?.[0] ?? "?"}
+                            {r.first_name ? r.first_name[0] : "?"}
                           </div>
                           <span style={{ color: "var(--muted-foreground)" }}>
-                            {r.user?.username ?? `Kullanıcı #${r.user_id}`}
+                            {fullName}
                           </span>
                         </div>
                       </td>
                       <td className="px-5 py-3">
                         <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: sc.bg, color: sc.text }}>
-                          {STATUS_LABELS[r.status]}
+                          {STATUS_LABELS[r.status] || "Bilinmiyor"}
                         </span>
                       </td>
+                      
+                      {/* İŞLEM TARİHİ */}
                       <td className="px-5 py-3" style={{ color: "var(--muted-foreground)" }}>
                         {r.reserved_at ? new Date(r.reserved_at).toLocaleDateString("tr-TR") : "—"}
                       </td>
+                      
+                      {/* İADE TARİHİ (Gecikmişse Kırmızı ve Kalın Yazı) */}
+                      <td 
+                        className="px-5 py-3" 
+                        style={{ 
+                          color: isOverdue ? "#DC2626" : "var(--muted-foreground)", // Kırmızı (#DC2626)
+                          fontWeight: isOverdue ? "bold" : "500" 
+                        }}
+                      >
+                        {r.due_date ? new Date(r.due_date).toLocaleDateString("tr-TR") : "—"}
+                        {isOverdue && (
+                          <span className="ml-2 text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                            Gecikti
+                          </span>
+                        )}
+                      </td>
+
                       <td className="px-5 py-3">
                         <select
                           value={r.status}
@@ -204,10 +235,10 @@ export default function AllReservationsPage() {
                           className="px-2 py-1.5 rounded-lg text-xs font-semibold outline-none cursor-pointer"
                           style={{ backgroundColor: "var(--muted)", border: "1.5px solid var(--border)", color: "var(--foreground)" }}
                         >
-                          <option value="pending">Bekliyor</option>
                           <option value="active">Aktif</option>
-                          <option value="returned">İade Edildi</option>
-                          <option value="cancelled">İptal</option>
+                          <option value="completed">Tamamlandı</option>
+                          <option value="cancelled">İptal Edildi</option>
+                          <option value="expired">Süresi Doldu</option>
                         </select>
                       </td>
                     </tr>

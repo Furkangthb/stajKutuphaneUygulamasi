@@ -1,18 +1,18 @@
 import { useEffect, useState } from "react";
-import { api, type Reservation } from "../api";
+import { api, type Reservation, type ReservationFull } from "../api";
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: "Bekliyor",
   active: "Aktif",
-  returned: "İade Edildi",
-  cancelled: "İptal",
+  completed: "İade Edildi",
+  cancelled: "İptal Edildi",
+  expired: "Süresi Doldu",
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  pending: { bg: "#FEF3C7", text: "#92400E" },
   active: { bg: "#D1FAE5", text: "#065F46" },
-  returned: { bg: "#DBEAFE", text: "#1E40AF" },
+  completed: { bg: "#DBEAFE", text: "#1E40AF" },
   cancelled: { bg: "#FEE2E2", text: "#991B1B" },
+  expired: { bg: "#FEF3C7", text: "#92400E" },
 };
 
 interface ReservationsPageProps {
@@ -20,7 +20,8 @@ interface ReservationsPageProps {
 }
 
 export default function ReservationsPage({ userId }: ReservationsPageProps) {
-  const [reservations, setReservations] = useState<Reservation[]>([]);
+  // Veritabanından kitap adı da geleceği için ReservationFull tipine esnetildi
+  const [reservations, setReservations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [updating, setUpdating] = useState<number | null>(null);
@@ -28,7 +29,11 @@ export default function ReservationsPage({ userId }: ReservationsPageProps) {
 
   useEffect(() => {
     api.getUserReservations(userId)
-      .then(setReservations)
+      .then((res: any) => {
+        // Güvenli dizi (array) kontrolü
+        const dataList = Array.isArray(res) ? res : (res?.data || res?.reservations || []);
+        setReservations(dataList);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [userId]);
@@ -38,14 +43,16 @@ export default function ReservationsPage({ userId }: ReservationsPageProps) {
     setTimeout(() => setToast(""), 3000);
   };
 
-  const updateStatus = async (id: number, status: Reservation["status"]) => {
+  const updateStatus = async (id: number, status: string) => {
+    if (!confirm(status === "completed" ? "Kitabı iade ettiğinizi onaylıyor musunuz?" : "Rezervasyonu iptal etmek istiyor musunuz?")) return;
+    
     setUpdating(id);
     try {
-      const updated = await api.updateReservation(id, { status });
-      setReservations((rs) => rs.map((r) => (r.id === id ? { ...r, ...updated } : r)));
-      showToast("Rezervasyon güncellendi");
+      await api.updateReservation(id, { status } as any);
+      setReservations((rs) => rs.map((r) => (r.id === id ? { ...r, status } : r)));
+      showToast("İşlem başarılı");
     } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : "Güncelleme başarısız");
+      showToast(e instanceof Error ? e.message : "İşlem başarısız");
     } finally {
       setUpdating(null);
     }
@@ -67,7 +74,7 @@ export default function ReservationsPage({ userId }: ReservationsPageProps) {
           <LoadingList />
         ) : error ? (
           <div className="flex items-center justify-center h-48">
-            <p className="text-sm" style={{ color: "#DC2626" }}>{error}</p>
+            <p className="text-sm font-semibold" style={{ color: "#DC2626" }}>{error}</p>
           </div>
         ) : reservations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-2">
@@ -103,24 +110,32 @@ export default function ReservationsPage({ userId }: ReservationsPageProps) {
 function ReservationCard({
   reservation, onUpdate, updating,
 }: {
-  reservation: Reservation;
-  onUpdate: (id: number, status: Reservation["status"]) => void;
+  reservation: any;
+  onUpdate: (id: number, status: string) => void;
   updating: boolean;
 }) {
   const sc = STATUS_COLORS[reservation.status] ?? { bg: "#F3F4F6", text: "#6B7280" };
-  const title = reservation.book?.title ?? `Kitap #${reservation.book_id}`;
-  const author = reservation.book?.author ?? "";
+  
+  // Backend bazen kitap adını göndermeyebilir, defansif kodlama:
+  const title = reservation.book_title || reservation.book?.title || `Kitap #${reservation.book_id}`;
+  const author = reservation.book_author || reservation.book?.author || "";
+
+  // Gecikme Kontrolü
+  const isOverdue = reservation.due_date && new Date(reservation.due_date) < new Date() && reservation.status === "active";
 
   return (
     <div
-      className="rounded-2xl p-5 flex items-start gap-4"
-      style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
+      className="rounded-2xl p-5 flex items-start gap-4 transition-all"
+      style={{ 
+        backgroundColor: "var(--card)", 
+        border: `1px solid ${isOverdue ? "#FCA5A5" : "var(--border)"}` 
+      }}
     >
       <div
         className="w-12 h-16 rounded-lg flex items-center justify-center shrink-0"
-        style={{ backgroundColor: "var(--muted)" }}
+        style={{ backgroundColor: isOverdue ? "#FEF2F2" : "var(--muted)" }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted-foreground)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={isOverdue ? "#DC2626" : "var(--muted-foreground)"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
           <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
         </svg>
@@ -129,47 +144,48 @@ function ReservationCard({
         <div className="flex items-start justify-between gap-2 mb-1">
           <h3 className="font-semibold text-sm leading-tight" style={{ color: "var(--foreground)" }}>{title}</h3>
           <span
-            className="shrink-0 px-2 py-0.5 rounded-full text-xs font-bold"
+            className="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider"
             style={{ backgroundColor: sc.bg, color: sc.text }}
           >
-            {STATUS_LABELS[reservation.status]}
+            {STATUS_LABELS[reservation.status] || "Bilinmiyor"}
           </span>
         </div>
         {author && <p className="text-xs mb-2" style={{ color: "var(--muted-foreground)" }}>{author}</p>}
-        {reservation.reserved_at && (
-          <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-            Rezervasyon: {new Date(reservation.reserved_at).toLocaleDateString("tr-TR")}
-          </p>
-        )}
+        
+        <div className="flex gap-4 mt-1">
+          {reservation.reserved_at && (
+            <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+              <span className="opacity-70">Alış:</span> {new Date(reservation.reserved_at).toLocaleDateString("tr-TR")}
+            </p>
+          )}
+          {reservation.due_date && (
+            <p className="text-xs font-medium" style={{ color: isOverdue ? "#DC2626" : "var(--muted-foreground)" }}>
+              <span className="opacity-70">İade Tarihi:</span> {new Date(reservation.due_date).toLocaleDateString("tr-TR")}
+              {isOverdue && <span className="ml-1.5 bg-red-100 text-red-700 px-1 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold">Gecikti</span>}
+            </p>
+          )}
+        </div>
+
+        {/* Butonlar: Sadece aktif rezervasyonlarda görünür */}
         {reservation.status === "active" && (
-          <div className="flex gap-2 mt-3">
+          <div className="flex gap-2 mt-4">
             <button
               disabled={updating}
-              onClick={() => onUpdate(reservation.id, "returned")}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all"
-              style={{ backgroundColor: "var(--secondary)", color: "var(--secondary-foreground)" }}
+              onClick={() => onUpdate(reservation.id, "completed")}
+              className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all"
+              style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
             >
-              {updating ? "…" : "İade Et"}
+              {updating ? "İşleniyor…" : "Teslim Ettim"}
             </button>
             <button
               disabled={updating}
               onClick={() => onUpdate(reservation.id, "cancelled")}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all"
+              className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all"
               style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}
             >
-              {updating ? "…" : "İptal Et"}
+              {updating ? "İşleniyor…" : "İptal Et"}
             </button>
           </div>
-        )}
-        {reservation.status === "pending" && (
-          <button
-            disabled={updating}
-            onClick={() => onUpdate(reservation.id, "cancelled")}
-            className="mt-3 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all"
-            style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}
-          >
-            {updating ? "…" : "İptal Et"}
-          </button>
         )}
       </div>
     </div>

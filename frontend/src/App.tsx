@@ -6,9 +6,10 @@ import ReservationsPage from "./pages/ReservationsPage";
 import ManageBooksPage from "./pages/ManageBooksPage";
 import ManageUsersPage from "./pages/ManageUsersPage";
 import AllReservationsPage from "./pages/AllReservationsPage";
+import ChatPage from "./pages/ChatPage";
 import Sidebar from "./components/Sidebar";
 
-type Page = "books" | "reservations" | "manage-books" | "manage-users" | "all-reservations";
+type Page = "books" | "reservations" | "manage-books" | "manage-users" | "all-reservations" | "chat";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -18,9 +19,9 @@ export default function App() {
   useEffect(() => {
     const token = localStorage.getItem("token");
     const storedUser = localStorage.getItem("user");
-    
+
     // Eğer token ve kullanıcı bilgisi varsa oturumu açık tutuyoruz
-    if (token && storedUser) {
+    if (token && storedUser && storedUser !== "undefined") {
       try {
         setUser(JSON.parse(storedUser));
       } catch (err) {
@@ -67,6 +68,8 @@ export default function App() {
         return user.role === "admin" ? <ManageUsersPage /> : <BooksPage userId={user.id} />;
       case "all-reservations":
         return user.role === "admin" ? <AllReservationsPage /> : <ReservationsPage userId={user.id} />;
+      case "chat":
+        return <ChatPage />;
       default:
         return <BooksPage userId={user.id} />;
     }
@@ -77,7 +80,7 @@ export default function App() {
       <Sidebar
         user={user}
         active={page}
-        onNavigate={(p:string) => setPage(p as Page)}
+        onNavigate={(p: string) => setPage(p as Page)}
         onLogout={handleLogout}
       />
       <main className="flex-1 overflow-hidden" style={{ backgroundColor: "var(--background)" }}>

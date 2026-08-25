@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"time"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/database"
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/middleware"
@@ -9,6 +10,7 @@ import (
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/services"
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/handlers"
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/repository"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -32,12 +34,22 @@ func main() {
 	authService := services.NewAuthServices(authRepo, userRepo, os.Getenv("JWT_SECRET"))
 	authHandler := handlers.NewAuthHandlers(authService)
 
-	chatService := services.NewChatServices(os.Getenv("GEMINI_API_KEY"), bookService)
+	chatRepo := repository.NewChatRepository(database.DB)
+	chatService := services.NewChatServices(os.Getenv("GEMINI_API_KEY"), bookService, chatRepo)
 	chatHandlers := handlers.NewChatHandlers(chatService)
 
 	r := gin.Default()
 
-	r.POST("/api/chat", chatHandlers.Chat)
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://furkan.local:54080", "http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
+	r.POST("/api/chat", middleware.RequireAuth(authService), chatHandlers.Chat)
 
 	r.POST("/api/users/register", userHandlers.UserRegister)
 	r.POST("/api/auth/login", authHandler.Login)
@@ -48,6 +60,7 @@ func main() {
 	r.GET("/api/users/:id", middleware.RequireAuth(authService), userHandlers.UserGet)
 
 	r.POST("/api/books", middleware.RequireAuth(authService), middleware.RequireRole("admin"), bookHandlers.BookAdd)
+	r.GET("/api/books/search", bookHandlers.BookSearch)
 	r.GET("/api/books/:id", bookHandlers.BookGet)
 	r.DELETE("/api/books/:id", middleware.RequireAuth(authService), middleware.RequireRole("admin"), bookHandlers.BookDelete)
 	r.PUT("/api/books/:id", middleware.RequireAuth(authService), middleware.RequireRole("admin"), bookHandlers.BookUpdate)
@@ -56,6 +69,6 @@ func main() {
 	r.POST("/api/reservation", middleware.RequireAuth(authService), reservationHandlers.ReservationCreate)
 	r.PUT("/api/reservation/:id", middleware.RequireAuth(authService), reservationHandlers.ReservationUpdate)
 	r.GET("/api/reservation/:id", middleware.RequireAuth(authService), reservationHandlers.ReservationGetUserByID)
-
+	r.GET("/api/reservations", middleware.RequireAuth(authService), middleware.RequireRole("admin"), reservationHandlers.ReservationListAll)
 	r.Run(":8080")
 }

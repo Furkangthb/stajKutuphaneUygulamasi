@@ -16,8 +16,8 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 }
 
 func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
-	query := `INSERT INTO users (first_name,last_name,phone,email,password_hash,role,created_at) VALUES ($1,$2,$3,$4,$5,$6,now()) RETURNING id`
-	err := r.db.QueryRowContext(ctx, query, user.FirstName, user.LastName, user.Phone, user.Email, user.PasswordHash, user.Role).Scan(&user.ID)
+	query := `INSERT INTO users (first_name,last_name,phone,email,password_hash,role,created_at) VALUES ($1,$2,$3,$4,$5,$6,now()) RETURNING id, created_at`
+	err := r.db.QueryRowContext(ctx, query, user.FirstName, user.LastName, user.Phone, user.Email, user.PasswordHash, user.Role).Scan(&user.ID, &user.Created_at)
 	if err != nil {
 		return err
 	}
@@ -25,13 +25,13 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 }
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
-	query := `SELECT id, first_name, last_name, phone, email, password_hash, role
+	query := `SELECT id, first_name, last_name, phone, email, password_hash, role, created_at
               FROM "users"
               WHERE email = $1`
 
 	user := &domain.User{}
 	err := r.db.QueryRowContext(ctx, query, email).Scan(
-		&user.ID, &user.FirstName, &user.LastName, &user.Phone, &user.Email, &user.PasswordHash, &user.Role,
+		&user.ID, &user.FirstName, &user.LastName, &user.Phone, &user.Email, &user.PasswordHash, &user.Role, &user.Created_at,
 	)
 	if err != nil {
 		return nil, err
@@ -40,13 +40,17 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id int64) (*domain.User, error) {
-	query := `SELECT id,first_name,last_name,phone,email,password_hash,role
+	// Not: eski sorguda phone/email seçiliyordu ama Scan'e hiç verilmemişti (kolon sayısı uyuşmazlığı,
+	// runtime'da "sql: expected N destination arguments in Scan" hatası verirdi) ve created_at hiç seçilmiyordu.
+	query := `SELECT id,first_name,last_name,phone,email,password_hash,role,created_at
 			FROM "users"
 			WHERE id=$1`
 
 	user := &domain.User{}
 
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&user.ID, &user.FirstName, &user.LastName, &user.PasswordHash, &user.Role)
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&user.ID, &user.FirstName, &user.LastName, &user.Phone, &user.Email, &user.PasswordHash, &user.Role, &user.Created_at,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +95,8 @@ func (r *UserRepository) Delete(ctx context.Context, id int64) error {
 }
 
 func (r *UserRepository) List(ctx context.Context, limit, ofset int) ([]*domain.User, error) {
-	query := `SELECT id,first_name,last_name,phone,email,password_hash,role
+
+	query := `SELECT id,first_name,last_name,phone,email,password_hash,role,created_at
 			FROM users
 			ORDER BY id
 			LIMIT $1 OFFSET $2`
@@ -105,7 +110,7 @@ func (r *UserRepository) List(ctx context.Context, limit, ofset int) ([]*domain.
 
 	for rows.Next() {
 		u := &domain.User{}
-		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.Phone, &u.Email, &u.PasswordHash, &u.Role); err != nil {
+		if err := rows.Scan(&u.ID, &u.FirstName, &u.LastName, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.Created_at); err != nil {
 			return nil, err
 		}
 		users = append(users, u)

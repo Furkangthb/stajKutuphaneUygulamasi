@@ -18,22 +18,29 @@ func NewBookRepository(db *sql.DB) *BookRepository {
 }
 
 func (r *BookRepository) BookCreate(ctx context.Context, book *domain.Book) error {
-	query := `INSERT INTO books (title,author,genre,publish_date,description,stock_count) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`
-	err := r.db.QueryRowContext(ctx, query, book.Title, book.Author, book.Genre, book.PublishDate, book.Description, book.StockCount).Scan(&book.ID)
+	query := `INSERT INTO books (isbn,title,author,genre,publish_date,description) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`
+	err := r.db.QueryRowContext(ctx, query, book.ISBN, book.Title, book.Author, book.Genre, book.PublishDate, book.Description).Scan(&book.ID)
 
 	if err != nil {
 		return err
 	}
+	book.Available = true
 	return nil
 }
 
 func (r *BookRepository) BookGetByID(ctx context.Context, id int64) (*domain.Book, error) {
-	query := `SELECT id,title,author,genre,publish_date,description,stock_count
-			FROM books
-			WHERE id=$1`
+	query := `SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
+			NOT EXISTS (
+				SELECT 1 FROM reservations res
+				WHERE res.book_id = b.id AND res.status IN ('pending','active')
+			) AS available
+			FROM books b
+			WHERE b.id=$1`
 
 	book := &domain.Book{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&book.ID, &book.Title, &book.Author, &book.Genre, &book.PublishDate, &book.Description, &book.StockCount)
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&book.ID, &book.ISBN, &book.Title, &book.Author, &book.Genre, &book.PublishDate, &book.Description, &book.Available,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -60,10 +67,10 @@ func (r *BookRepository) BookDelete(ctx context.Context, id int64) error {
 
 func (r *BookRepository) BookUpdate(ctx context.Context, book *domain.Book) error {
 	query := `UPDATE books
-			SET title=$1,author=$2,genre=$3,publish_date=$4,description=$5,stock_count=$6
+			SET isbn=$1,title=$2,author=$3,genre=$4,publish_date=$5,description=$6
 			WHERE id=$7`
 
-	result, err := r.db.ExecContext(ctx, query, book.Title, book.Author, book.Genre, book.PublishDate, book.Description, book.StockCount, book.ID)
+	result, err := r.db.ExecContext(ctx, query, book.ISBN, book.Title, book.Author, book.Genre, book.PublishDate, book.Description, book.ID)
 	if err != nil {
 		return err
 	}
@@ -79,9 +86,13 @@ func (r *BookRepository) BookUpdate(ctx context.Context, book *domain.Book) erro
 }
 
 func (r *BookRepository) BookList(ctx context.Context, limit, offset int) ([]*domain.Book, error) {
-	query := `SELECT id,title,author,genre,publish_date,description,stock_count
-			FROM books
-			ORDER BY id
+	query := `SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
+			NOT EXISTS (
+				SELECT 1 FROM reservations res
+				WHERE res.book_id = b.id AND res.status IN ('pending','active')
+			) AS available
+			FROM books b
+			ORDER BY b.id
 			LIMIT $1 OFFSET $2`
 
 	rows, err := r.db.QueryContext(ctx, query, limit, offset)
@@ -93,7 +104,7 @@ func (r *BookRepository) BookList(ctx context.Context, limit, offset int) ([]*do
 	var books []*domain.Book
 	for rows.Next() {
 		b := &domain.Book{}
-		if err := rows.Scan(&b.ID, &b.Title, &b.Author, &b.Genre, &b.PublishDate, &b.Description, &b.StockCount); err != nil {
+		if err := rows.Scan(&b.ID, &b.ISBN, &b.Title, &b.Author, &b.Genre, &b.PublishDate, &b.Description, &b.Available); err != nil {
 			return nil, err
 		}
 		books = append(books, b)
@@ -114,13 +125,17 @@ func (r *BookRepository) BookSearch(ctx context.Context, limit int, keywords []s
 	var argsIndex = 1
 
 	for _, kw := range keywords {
-		conditions = append(conditions, fmt.Sprintf("(title ILIKE $%d OR author ILIKE $%d OR genre ILIKE $%d)", argsIndex, argsIndex, argsIndex))
+		conditions = append(conditions, fmt.Sprintf("(b.title ILIKE $%d OR b.author ILIKE $%d OR b.genre ILIKE $%d)", argsIndex, argsIndex, argsIndex))
 		args = append(args, "%"+kw+"%")
 		argsIndex++
 	}
 
-	query := fmt.Sprintf(`SELECT id,title,author,genre,publish_date,description,stock_count
-			FROM books
+	query := fmt.Sprintf(`SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
+			NOT EXISTS (
+				SELECT 1 FROM reservations res
+				WHERE res.book_id = b.id AND res.status IN ('pending','active')
+			) AS available
+			FROM books b
 			WHERE %s
 			LIMIT $%d`, strings.Join(conditions, " OR "), argsIndex)
 	args = append(args, limit)
@@ -134,7 +149,7 @@ func (r *BookRepository) BookSearch(ctx context.Context, limit int, keywords []s
 	var books []*domain.Book
 	for rows.Next() {
 		b := &domain.Book{}
-		if err := rows.Scan(&b.ID, &b.Title, &b.Author, &b.Genre, &b.PublishDate, &b.Description, &b.StockCount); err != nil {
+		if err := rows.Scan(&b.ID, &b.ISBN, &b.Title, &b.Author, &b.Genre, &b.PublishDate, &b.Description, &b.Available); err != nil {
 			return nil, err
 		}
 		books = append(books, b)

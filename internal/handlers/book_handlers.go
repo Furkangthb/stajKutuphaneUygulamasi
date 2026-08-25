@@ -3,8 +3,10 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/services"
 	"github.com/gin-gonic/gin"
 )
@@ -18,12 +20,12 @@ func NewBookHandlers(bookService *services.BookServices) *BookHandlers {
 }
 
 type BookAdd struct {
+	ISBN        string    `json:"isbn" binding:"required"`
 	Title       string    `json:"title" binding:"required"`
 	Author      string    `json:"author" binding:"required"`
 	Genre       string    `json:"genre" binding:"required"`
 	PublishDate time.Time `json:"publish_date" binding:"required" `
 	Description string    `json:"description" binding:"required"`
-	StockCount  int       `json:"stock_count" binding:"required"`
 }
 
 func (h *BookHandlers) BookAdd(c *gin.Context) {
@@ -35,7 +37,7 @@ func (h *BookHandlers) BookAdd(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	book, err := h.bookService.BookAdd(ctx, kitapEkle.Title, kitapEkle.Author, kitapEkle.Genre, kitapEkle.PublishDate, kitapEkle.Description, kitapEkle.StockCount)
+	book, err := h.bookService.BookAdd(ctx, kitapEkle.ISBN, kitapEkle.Title, kitapEkle.Author, kitapEkle.Genre, kitapEkle.PublishDate, kitapEkle.Description)
 	if err != nil {
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
@@ -82,12 +84,12 @@ func (h *BookHandlers) BookDelete(c *gin.Context) {
 }
 
 type BookRework struct {
+	ISBN        string    `json:"isbn" binding:"required"`
 	Title       string    `json:"title" binding:"required"`
 	Author      string    `json:"author" binding:"required"`
 	Genre       string    `json:"genre" binding:"required"`
 	PublishDate time.Time `json:"publish_date" binding:"required"`
 	Description string    `json:"description" binding:"required"`
-	StockCount  int       `json:"stock_count" binding:"required"`
 }
 
 func (h *BookHandlers) BookUpdate(c *gin.Context) {
@@ -106,7 +108,7 @@ func (h *BookHandlers) BookUpdate(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	book, err := h.bookService.BookUpdate(ctx, id, rework.Title, rework.Author, rework.Genre, rework.PublishDate, rework.Description, rework.StockCount)
+	book, err := h.bookService.BookUpdate(ctx, id, rework.ISBN, rework.Title, rework.Author, rework.Genre, rework.PublishDate, rework.Description)
 	if err != nil {
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
@@ -127,4 +129,22 @@ func (h *BookHandlers) BookList(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, books)
+}
+
+func (h *BookHandlers) BookSearch(c *gin.Context) {
+	q := c.Query("q")
+	if q == "" {
+		c.JSON(200, []*domain.Book{})
+		return
+	}
+
+	keywords := strings.Fields(q)
+
+	books, err := h.bookService.BookSearch(c.Request.Context(), keywords, 50)
+	if err != nil {
+		c.JSON(400, gin.H{"Hata": err.Error()})
+		return
+	}
+
+	c.JSON(200, books)
 }

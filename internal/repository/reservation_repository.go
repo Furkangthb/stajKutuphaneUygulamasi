@@ -23,25 +23,8 @@ func (r *ReservationRepository) ReservationCreate(ctx context.Context, reservati
 	}
 	defer tx.Rollback()
 
-	var stockCount int
-	err = tx.QueryRowContext(ctx, `SELECT stock_count FROM books WHERE id=$1 FOR UPDATE`, reservation.BookID).Scan(&stockCount)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return errors.New("kitap bulunamadi")
-		}
-		return err
-	}
-	if stockCount <= 0 {
-		return errors.New("kitap stokta yok")
-	}
-
 	query := `INSERT INTO reservations( user_id,book_id,status,due_date) VALUES($1,$2,$3,$4) RETURNING id`
 	err = tx.QueryRowContext(ctx, query, reservation.UserID, reservation.BookID, reservation.Status, reservation.DueDate).Scan(&reservation.ID)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.ExecContext(ctx, `UPDATE books SET stock_count = stock_count - 1 WHERE id=$1`, reservation.BookID)
 	if err != nil {
 		return err
 	}
@@ -78,14 +61,6 @@ func (r *ReservationRepository) ReservationUpdate(ctx context.Context, reservati
 		return sql.ErrNoRows
 	}
 
-	yeniStatusIadeMi := reservation.Status == "returned" || reservation.Status == "cancelled"
-	if mevcutStatus == "active" && yeniStatusIadeMi {
-		_, err = tx.ExecContext(ctx, `UPDATE books SET stock_count = stock_count + 1 WHERE id=$1`, bookID)
-		if err != nil {
-			return err
-		}
-	}
-
 	return tx.Commit()
 }
 
@@ -105,13 +80,47 @@ func (r *ReservationRepository) ReservationGetByID(ctx context.Context, id int) 
 	return reservation, nil
 }
 
-func (r *ReservationRepository) ReservationGetUserByID(ctx context.Context, userID int) ([]*domain.ReservationWithUser, error) {
-	query := `SELECT r.id, r.user_id, r.book_id, r.status, r.reserved_at, r.due_date, u.first_name, u.last_name
+func (r *ReservationRepository) ReservationGetAll(ctx context.Context) ([]*domain.ReservationFull, error) {
+	query := `SELECT r.id, r.user_id, r.book_id, r.status, r.reserved_at, r.due_date,
+				u.first_name, u.last_name, b.title, b.author
 			FROM reservations AS r
-			INNER JOIN users AS u ON r.user_id=u.id
-			WHERE u.id=$1`
+			INNER JOIN users AS u ON r.user_id = u.id
+			INNER JOIN books AS b ON r.book_id = b.id
+			ORDER BY r.reserved_at DESC`
 
-	reservations := []*domain.ReservationWithUser{}
+	reservations := []*domain.ReservationFull{}
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		reserve := &domain.ReservationFull{}
+		err := rows.Scan(
+			&reserve.ID, &reserve.UserID, &reserve.BookID, &reserve.Status,
+			&reserve.ReservedAt, &reserve.DueDate, &reserve.FirstName, &reserve.LastName,
+			&reserve.BookTitle, &reserve.BookAuthor,
+		)
+		if err != nil {
+			return nil, err
+		}
+		reservations = append(reservations, reserve)
+	}
+	return reservations, nil
+}
+
+func (r *ReservationRepository) ReservationGetUserByID(ctx context.Context, userID int) ([]*domain.ReservationFull, error) {
+
+	query := `SELECT r.id, r.user_id, r.book_id, r.status, r.reserved_at, r.due_date, 
+                u.first_name, u.last_name, b.title, b.author
+            FROM reservations AS r
+            INNER JOIN users AS u ON r.user_id = u.id
+            INNER JOIN books AS b ON r.book_id = b.id
+            WHERE u.id=$1
+            ORDER BY r.reserved_at DESC`
+
+	reservations := []*domain.ReservationFull{}
 	rows, err := r.db.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, err
@@ -119,10 +128,11 @@ func (r *ReservationRepository) ReservationGetUserByID(ctx context.Context, user
 	defer rows.Close()
 
 	for rows.Next() {
-		reserve := &domain.ReservationWithUser{}
+		reserve := &domain.ReservationFull{}
 		err := rows.Scan(
 			&reserve.ID, &reserve.UserID, &reserve.BookID, &reserve.Status,
 			&reserve.ReservedAt, &reserve.DueDate, &reserve.FirstName, &reserve.LastName,
+			&reserve.BookTitle, &reserve.BookAuthor,
 		)
 		if err != nil {
 			return nil, err

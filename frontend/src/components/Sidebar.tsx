@@ -10,6 +10,7 @@ interface SidebarProps {
 const userNavItems = [
   { key: "books", label: "Kitap Kataloğu", icon: BookIcon },
   { key: "reservations", label: "Rezervasyonlarım", icon: ReservationIcon },
+  { key: "chat", label: "Yapay Zeka Asistanı", icon: ChatIcon },
 ];
 
 const adminNavItems = [
@@ -17,6 +18,7 @@ const adminNavItems = [
   { key: "manage-books", label: "Kitap Yönetimi", icon: ManageIcon },
   { key: "manage-users", label: "Kullanıcılar", icon: UsersIcon },
   { key: "all-reservations", label: "Tüm Rezervasyonlar", icon: ReservationIcon },
+  { key: "chat", label: "Yapay Zeka Asistanı", icon: ChatIcon },
   { key: "reservations", label: "Rezervasyonlarım", icon: ReservationIcon },
 ];
 
@@ -74,11 +76,11 @@ export default function Sidebar({ user, active, onNavigate, onLogout }: SidebarP
             className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold uppercase"
             style={{ backgroundColor: "var(--sidebar-accent)", color: "#12110F" }}
           >
-            {user.username?.[0] ?? "U"}
+            {user.first_name?.[0] ?? "U"}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate" style={{ color: "var(--sidebar-foreground)" }}>
-              {user.username}
+              {user.first_name}
             </p>
             <p className="text-xs opacity-40 capitalize">{user.role}</p>
           </div>
@@ -141,6 +143,14 @@ function LogoutIcon({ size }: { size: number }) {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <polyline points="16 17 21 12 16 7" />
       <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
+function ChatIcon({ size, active }: { size: number; active?: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.5 : 2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   );
 }

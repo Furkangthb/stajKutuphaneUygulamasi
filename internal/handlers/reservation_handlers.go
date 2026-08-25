@@ -77,6 +77,15 @@ func (h *ReservationHandlers) ReservationUpdate(c *gin.Context) {
 	c.JSON(200, reserve)
 }
 
+func (h *ReservationHandlers) ReservationListAll(c *gin.Context) {
+	reservations, err := h.reserService.ReservationListAll(c.Request.Context())
+	if err != nil {
+		c.JSON(400, gin.H{"Hata": err.Error()})
+		return
+	}
+	c.JSON(200, reservations)
+}
+
 func (h *ReservationHandlers) ReservationGetUserByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
