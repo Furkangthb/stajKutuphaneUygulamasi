@@ -15,6 +15,11 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   expired: { bg: "#FEF3C7", text: "#92400E" },
 };
 
+const STATUS_FILTERS = ["Tümü", "Aktif", "İade Edildi", "İptal Edildi", "Süresi Doldu"];
+const STATUS_MAP: Record<string, string> = {
+  "Aktif": "active", "İade Edildi": "completed", "İptal Edildi": "cancelled", "Süresi Doldu": "expired",
+};
+
 interface ReservationsPageProps {
   userId: number;
 }
@@ -24,8 +29,7 @@ export default function ReservationsPage({ userId }: ReservationsPageProps) {
   const [reservations, setReservations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [updating, setUpdating] = useState<number | null>(null);
-  const [toast, setToast] = useState("");
+  const [statusFilter, setStatusFilter] = useState("Tümü");
 
   useEffect(() => {
     api.getUserReservations(userId)
@@ -38,25 +42,9 @@ export default function ReservationsPage({ userId }: ReservationsPageProps) {
       .finally(() => setLoading(false));
   }, [userId]);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 3000);
-  };
-
-  const updateStatus = async (id: number, status: string) => {
-    if (!confirm(status === "completed" ? "Kitabı iade ettiğinizi onaylıyor musunuz?" : "Rezervasyonu iptal etmek istiyor musunuz?")) return;
-    
-    setUpdating(id);
-    try {
-      await api.updateReservation(id, { status } as any);
-      setReservations((rs) => rs.map((r) => (r.id === id ? { ...r, status } : r)));
-      showToast("İşlem başarılı");
-    } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : "İşlem başarısız");
-    } finally {
-      setUpdating(null);
-    }
-  };
+  const filteredReservations = reservations.filter(
+    (r) => statusFilter === "Tümü" || r.status === STATUS_MAP[statusFilter]
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -65,8 +53,25 @@ export default function ReservationsPage({ userId }: ReservationsPageProps) {
           Rezervasyonlarım
         </h1>
         <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-          {reservations.length} rezervasyon
+          {filteredReservations.length} rezervasyon
         </p>
+      </div>
+
+      <div className="px-8 pb-5 flex gap-1.5 flex-wrap">
+        {STATUS_FILTERS.map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
+            className="px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+            style={{
+              backgroundColor: statusFilter === s ? "var(--primary)" : "var(--card)",
+              color: statusFilter === s ? "var(--primary-foreground)" : "var(--muted-foreground)",
+              border: `1.5px solid ${statusFilter === s ? "var(--primary)" : "var(--border)"}`,
+            }}
+          >
+            {s}
+          </button>
+        ))}
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 pb-8">
@@ -81,39 +86,23 @@ export default function ReservationsPage({ userId }: ReservationsPageProps) {
             <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Henüz rezervasyonunuz yok</p>
             <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>Kitap kataloğundan rezervasyon yapabilirsiniz</p>
           </div>
+        ) : filteredReservations.length === 0 ? (
+          <div className="flex items-center justify-center h-48">
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>Bu durumda rezervasyon bulunamadı</p>
+          </div>
         ) : (
           <div className="space-y-3 max-w-2xl">
-            {reservations.map((res) => (
-              <ReservationCard
-                key={res.id}
-                reservation={res}
-                onUpdate={updateStatus}
-                updating={updating === res.id}
-              />
+            {filteredReservations.map((res) => (
+              <ReservationCard key={res.id} reservation={res} />
             ))}
           </div>
         )}
       </div>
-
-      {toast && (
-        <div
-          className="fixed bottom-6 right-6 px-5 py-3 rounded-xl text-sm font-semibold shadow-lg z-50"
-          style={{ backgroundColor: "var(--sidebar)", color: "var(--sidebar-foreground)" }}
-        >
-          {toast}
-        </div>
-      )}
     </div>
   );
 }
 
-function ReservationCard({
-  reservation, onUpdate, updating,
-}: {
-  reservation: any;
-  onUpdate: (id: number, status: string) => void;
-  updating: boolean;
-}) {
+function ReservationCard({ reservation }: { reservation: any }) {
   const sc = STATUS_COLORS[reservation.status] ?? { bg: "#F3F4F6", text: "#6B7280" };
   
   // Backend bazen kitap adını göndermeyebilir, defansif kodlama:
@@ -166,27 +155,8 @@ function ReservationCard({
           )}
         </div>
 
-        {/* Butonlar: Sadece aktif rezervasyonlarda görünür */}
-        {reservation.status === "active" && (
-          <div className="flex gap-2 mt-4">
-            <button
-              disabled={updating}
-              onClick={() => onUpdate(reservation.id, "completed")}
-              className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all"
-              style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
-            >
-              {updating ? "İşleniyor…" : "Teslim Ettim"}
-            </button>
-            <button
-              disabled={updating}
-              onClick={() => onUpdate(reservation.id, "cancelled")}
-              className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all"
-              style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}
-            >
-              {updating ? "İşleniyor…" : "İptal Et"}
-            </button>
-          </div>
-        )}
+        {/* Durum değişikliği (iptal/iade) artık kullanıcının elinde değil,
+            kütüphaneci masasından (admin) yapılıyor — bu kart salt-okunur. */}
       </div>
     </div>
   );

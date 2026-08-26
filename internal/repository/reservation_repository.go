@@ -8,6 +8,11 @@ import (
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
 )
 
+var (
+	ErrBookNotFound     = errors.New("kitap bulunamadi")
+	ErrBookNotAvailable = errors.New("kitap su anda musait degil")
+)
+
 type ReservationRepository struct {
 	db *sql.DB
 }
@@ -23,8 +28,29 @@ func (r *ReservationRepository) ReservationCreate(ctx context.Context, reservati
 	}
 	defer tx.Rollback()
 
-	query := `INSERT INTO reservations( user_id,book_id,status,due_date) VALUES($1,$2,$3,$4) RETURNING id`
-	err = tx.QueryRowContext(ctx, query, reservation.UserID, reservation.BookID, reservation.Status, reservation.DueDate).Scan(&reservation.ID)
+	var bookExists bool
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM books WHERE id=$1 FOR UPDATE)`, reservation.BookID).Scan(&bookExists)
+	if err != nil {
+		return err
+	}
+	if !bookExists {
+		return ErrBookNotFound
+	}
+
+	var alreadyReserved bool
+	err = tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM reservations WHERE book_id=$1 AND status='active')`,
+		reservation.BookID,
+	).Scan(&alreadyReserved)
+	if err != nil {
+		return err
+	}
+	if alreadyReserved {
+		return ErrBookNotAvailable
+	}
+
+	query := `INSERT INTO reservations( user_id,book_id,status,due_date) VALUES($1,$2,$3,$4) RETURNING id, reserved_at`
+	err = tx.QueryRowContext(ctx, query, reservation.UserID, reservation.BookID, reservation.Status, reservation.DueDate).Scan(&reservation.ID, &reservation.ReservedAt)
 	if err != nil {
 		return err
 	}

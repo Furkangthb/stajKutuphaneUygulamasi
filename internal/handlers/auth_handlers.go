@@ -21,6 +21,17 @@ type loginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// Login godoc
+// @Summary Kullanıcı Giriş Yap
+// @Description Sisteme giriş yapmak için kullanılır
+// @Tags Auth
+// @Accept  json
+// @Produce json
+// @Param request body LoginRequest true "Kullanıcı Giriş Bilgileri"
+// @Success 200 {object}  map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// Failure 401 {object} map[string]interface {}
+// @Router /api/auth/login  [post]
 func (h *AuthHandlers) Login(c *gin.Context) {
 	var istek loginRequest
 
@@ -42,6 +53,17 @@ func (h *AuthHandlers) Login(c *gin.Context) {
 	})
 }
 
+// Logout godoc
+// @Summary Kullanıcı Çıkış Yap
+// @Description Sistemden çıkış yapmak için kullanılır
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/auth/logout [post]
 func (h *AuthHandlers) Logout(c *gin.Context) {
 	autHeader := c.GetHeader("Authorization")
 	if autHeader == "" {

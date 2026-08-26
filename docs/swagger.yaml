@@ -1,0 +1,550 @@
+basePath: /
+definitions:
+  internal_handlers.BookAdd:
+    properties:
+      author:
+        type: string
+      description:
+        type: string
+      genre:
+        type: string
+      isbn:
+        type: string
+      publish_date:
+        type: string
+      title:
+        type: string
+    required:
+    - author
+    - description
+    - genre
+    - isbn
+    - publish_date
+    - title
+    type: object
+  internal_handlers.BookRework:
+    properties:
+      author:
+        type: string
+      description:
+        type: string
+      genre:
+        type: string
+      isbn:
+        type: string
+      publish_date:
+        type: string
+      title:
+        type: string
+    required:
+    - author
+    - description
+    - genre
+    - isbn
+    - publish_date
+    - title
+    type: object
+  internal_handlers.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_handlers.ReservationCreatRequest:
+    properties:
+      book_id:
+        type: integer
+      status:
+        type: string
+      user_id:
+        type: integer
+    required:
+    - book_id
+    - status
+    - user_id
+    type: object
+  internal_handlers.ReservationUpdateRequest:
+    properties:
+      status:
+        type: string
+    required:
+    - status
+    type: object
+  internal_handlers.UserRework:
+    properties:
+      email:
+        type: string
+      first_name:
+        type: string
+      last_name:
+        type: string
+      role:
+        type: string
+    required:
+    - email
+    - first_name
+    - last_name
+    - role
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Kütüphane Otomasyonu Rest API Dokümantasyonu
+  title: Staj Kütüphane Uygulaması
+  version: "1.0"
+paths:
+  /api/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Sisteme giriş yapmak için kullanılır
+      parameters:
+      - description: Kullanıcı Giriş Bilgileri
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handlers.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Kullanıcı Giriş Yap
+      tags:
+      - Auth
+  /api/auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Sistemden çıkış yapmak için kullanılır
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Kullanıcı Çıkış Yap
+      tags:
+      - Auth
+  /api/books:
+    get:
+      consumes:
+      - application/json
+      description: Kitapları listeler
+      parameters:
+      - description: Sayfa
+        in: query
+        name: page
+        type: integer
+      - description: Sayfa Boyutu
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Kitap Listeleme
+      tags:
+      - Books
+    post:
+      consumes:
+      - application/json
+      description: Admin tarafından kitap eklenir
+      parameters:
+      - description: Kitap Bilgileri
+        in: body
+        name: book
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handlers.BookAdd'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Kitap Ekleme
+      tags:
+      - Books
+  /api/books/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Admin tarafından kitap silinir
+      parameters:
+      - description: Kitap ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Kitap Silme
+      tags:
+      - Books
+    get:
+      consumes:
+      - application/json
+      description: Seçilen Kitabı getirir
+      parameters:
+      - description: Kitap ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Kitap Getirme
+      tags:
+      - Books
+    put:
+      consumes:
+      - application/json
+      description: Admin tarafından kitap güncellenir
+      parameters:
+      - description: Kitap ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Kitap Bilgileri
+        in: body
+        name: book
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handlers.BookRework'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Kitap Güncelleme
+      tags:
+      - Books
+  /api/reservation:
+    post:
+      consumes:
+      - application/json
+      description: Kullanıcı için rezervasyon oluşturur. Bearer token gerektirir.
+      parameters:
+      - description: Rezervasyon İsteği
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handlers.ReservationCreatRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Rezervasyon Oluşturma
+      tags:
+      - Reservations
+  /api/reservation/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Kullanıcıya ait tüm rezervasyonları listeler. Bearer token gerektirir.
+      parameters:
+      - description: Kullanıcı ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Kullanıcıya Ait Rezervasyonları Listeleme
+      tags:
+      - Reservations
+    put:
+      consumes:
+      - application/json
+      description: Kullanıcı için rezervasyon günceller. Bearer token gerektirir.
+      parameters:
+      - description: Rezervasyon ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Rezervasyon Güncellemesi
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handlers.ReservationUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Rezervasyon Güncelleme
+      tags:
+      - Reservations
+  /api/reservations:
+    get:
+      consumes:
+      - application/json
+      description: Tüm rezervasyonları listeler. Bearer token gerektirir.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Tüm Rezervasyonları Listeleme
+      tags:
+      - Reservations
+  /api/users:
+    get:
+      consumes:
+      - application/json
+      description: Tüm kullanıcıları listeler. Bearer token ve Admin yetkisi gerektirir.
+      parameters:
+      - description: Sayfa numarası
+        in: query
+        name: page
+        type: integer
+      - description: Sayfa boyutu
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Kullanıcıları Listeleme
+      tags:
+      - Users
+  /api/users/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Kullanıcıyı siler. Bearer token ve Admin yetkisi gerektirir.
+      parameters:
+      - description: Kullanıcı ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Kullanıcı Silme
+      tags:
+      - Users
+    get:
+      consumes:
+      - application/json
+      description: Kullanıcı bilgilerini getirir. Bearer token gerektirir.
+      parameters:
+      - description: Kullanıcı ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Kullanıcı Bilgilerini Getir
+      tags:
+      - Users
+    put:
+      consumes:
+      - application/json
+      description: Kullanıcı bilgilerini günceller. Bearer token gerektirir.
+      parameters:
+      - description: Kullanıcı ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Kullanıcı Güncellemesi
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handlers.UserRework'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Kullanıcı Güncelleme
+      tags:
+      - Users
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

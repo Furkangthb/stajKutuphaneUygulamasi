@@ -10,6 +10,13 @@ import (
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/repository"
 )
 
+var (
+	ErrReservationNotFound = errors.New("rezervasyon bulunamadi")
+	ErrForbidden           = errors.New("bu islem icin yetkiniz yok")
+	ErrInvalidStatus       = errors.New("gecersiz durum degeri")
+	ErrInvalidTransition   = errors.New("bu durum gecisine izin verilmiyor")
+)
+
 type ReservationServices struct {
 	repo *repository.ReservationRepository
 }
@@ -17,34 +24,62 @@ type ReservationServices struct {
 func NewReservationServices(repo *repository.ReservationRepository) *ReservationServices {
 	return &ReservationServices{repo: repo}
 }
-func (s *ReservationServices) ReservationCreate(ctx context.Context, userId int, bookId int, status string) (*domain.Reservation, error) {
+
+func (s *ReservationServices) ReservationCreate(ctx context.Context, requesterID int, requesterRole string, bodyUserID int, bookId int) (*domain.Reservation, error) {
+	targetUserID := requesterID
+	if requesterRole == "admin" && bodyUserID != 0 {
+		targetUserID = bodyUserID
+	}
 
 	dueDate := time.Now().AddDate(0, 0, 14)
 	newReservation := domain.Reservation{
-		UserID:  userId,
+		UserID:  targetUserID,
 		BookID:  bookId,
-		Status:  status,
+		Status:  domain.StatusActive,
 		DueDate: dueDate,
 	}
 	err := s.repo.ReservationCreate(ctx, &newReservation)
 	if err != nil {
-		fmt.Println("REZERVASYON DB HATASI:", err)
-		return nil, errors.New("rezervasyon yapilamadi")
+		switch {
+		case errors.Is(err, repository.ErrBookNotFound):
+			return nil, errors.New("kitap bulunamadi")
+		case errors.Is(err, repository.ErrBookNotAvailable):
+			return nil, errors.New("bu kitap su anda musait degil (zaten rezerve/odunc)")
+		default:
+			fmt.Println("REZERVASYON DB HATASI:", err)
+			return nil, errors.New("rezervasyon yapilamadi")
+		}
 	}
 	return &newReservation, nil
 }
 
-func (s *ReservationServices) ReservationUpdate(ctx context.Context, id int, status string) (*domain.Reservation, error) {
-	ReworkReservation := domain.Reservation{
+func (s *ReservationServices) ReservationUpdate(ctx context.Context, requesterID int, requesterRole string, id int, newStatus string) (*domain.Reservation, error) {
+	if !domain.IsValidStatus(newStatus) {
+		return nil, ErrInvalidStatus
+	}
 
-		ID:     id,
-		Status: status,
-	}
-	err := s.repo.ReservationUpdate(ctx, &ReworkReservation)
+	existing, err := s.repo.ReservationGetByID(ctx, id)
 	if err != nil {
-		return nil, errors.New("rezervasyom guncellenmedi")
+		return nil, ErrReservationNotFound
 	}
-	return &ReworkReservation, nil
+
+	if requesterRole != "admin" && existing.UserID != requesterID {
+		return nil, ErrForbidden
+	}
+
+	if !domain.CanUserTransition(requesterRole, existing.Status, newStatus) {
+		return nil, ErrInvalidTransition
+	}
+
+	reworkReservation := domain.Reservation{
+		ID:     id,
+		Status: newStatus,
+	}
+	err = s.repo.ReservationUpdate(ctx, &reworkReservation)
+	if err != nil {
+		return nil, errors.New("rezervasyon guncellenmedi")
+	}
+	return &reworkReservation, nil
 }
 
 func (s *ReservationServices) ReservationGetByID(ctx context.Context, id int) (*domain.Reservation, error) {

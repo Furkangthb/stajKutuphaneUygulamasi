@@ -7,13 +7,24 @@ import (
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/database"
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/middleware"
 
+	_ "github.com/Furkangthb/stajKutuphaneUygulamasi/docs"
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/services"
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/handlers"
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/repository"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// @title Staj Kütüphane Uygulaması
+// @version 1.0
+// @description Kütüphane Otomasyonu Rest API Dokümantasyonu
+// @host localhost:8080
+// @BasePath /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
 	database.VeriTabaniBaglanma()
 	database.RedisConnect()
@@ -41,15 +52,16 @@ func main() {
 	r := gin.Default()
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://furkan.local:54080", "http://localhost:5173"},
+		AllowOrigins:     []string{"http://furkan.local:54080", "http://localhost:5173", "http://localhost:8080"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
-
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.POST("/api/chat", middleware.RequireAuth(authService), chatHandlers.Chat)
+	r.GET("/api/chat/history", middleware.RequireAuth(authService), chatHandlers.ChatHistory)
 
 	r.POST("/api/users/register", userHandlers.UserRegister)
 	r.POST("/api/auth/login", authHandler.Login)
@@ -58,6 +70,7 @@ func main() {
 	r.DELETE("/api/users/:id", middleware.RequireAuth(authService), middleware.RequireRole("admin"), userHandlers.UserDelete)
 	r.PUT("/api/users/:id", middleware.RequireAuth(authService), userHandlers.UserUpdate)
 	r.GET("/api/users/:id", middleware.RequireAuth(authService), userHandlers.UserGet)
+	r.PUT("/api/users/:id/password", middleware.RequireAuth(authService), userHandlers.UserChangePassword)
 
 	r.POST("/api/books", middleware.RequireAuth(authService), middleware.RequireRole("admin"), bookHandlers.BookAdd)
 	r.GET("/api/books/search", bookHandlers.BookSearch)
@@ -70,5 +83,6 @@ func main() {
 	r.PUT("/api/reservation/:id", middleware.RequireAuth(authService), reservationHandlers.ReservationUpdate)
 	r.GET("/api/reservation/:id", middleware.RequireAuth(authService), reservationHandlers.ReservationGetUserByID)
 	r.GET("/api/reservations", middleware.RequireAuth(authService), middleware.RequireRole("admin"), reservationHandlers.ReservationListAll)
+
 	r.Run(":8080")
 }

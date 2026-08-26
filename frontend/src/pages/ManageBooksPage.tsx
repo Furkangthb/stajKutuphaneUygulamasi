@@ -11,6 +11,7 @@ export interface Book {
   publish_date: string; // Backend time.Time beklediği için string (ISO formatı) olacak
   description: string;
   available?: boolean;
+  reservedUserId?: number; // "Dolu" seçildiğinde kime rezerve edildiği (sadece UI state)
 }
 
 const empty: Omit<Book, "id"> = {
@@ -21,6 +22,7 @@ const empty: Omit<Book, "id"> = {
   publish_date: "", 
   description: "",
   available: true,
+  reservedUserId: undefined,
 };
 
 export default function ManageBooksPage() {
@@ -33,9 +35,14 @@ export default function ManageBooksPage() {
   const [deleting, setDeleting] = useState<number | null>(null);
   const [toast, setToast] = useState("");
   const [search, setSearch] = useState("");
+  const [users, setUsers] = useState<{ id: number; first_name: string; last_name: string; email: string }[]>([]);
+  const [originalReservedUserId, setOriginalReservedUserId] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     load();
+    api.getUsers(1, 200)
+      .then((res: any) => setUsers(Array.isArray(res) ? res : (res?.data || [])))
+      .catch(() => {}); // kullanıcı listesi gelmezse "Dolu" seçimi devre dışı kalır, sessiz geç
   }, []);
 
   const load = () => {
@@ -63,22 +70,38 @@ export default function ManageBooksPage() {
 
   const openAdd = () => {
     setForm(empty);
+    setOriginalReservedUserId(undefined);
     setModal({ open: true, editing: null });
   };
 
-  const openEdit = (book: Book) => {
+  const openEdit = async (book: Book) => {
+    
     if (!book) return;
     
     // Backend'den gelen 2026-08-25T10:00:00Z formatındaki tarihi input type="date" için YYYY-MM-DD'ye çeviriyoruz
     const dateStr = book.publish_date ? book.publish_date.split("T")[0] : "";
 
+    let reservedUserId: number | undefined = undefined;
+    if (book.available === false) {
+      // Bu kitaba ait aktif rezervasyonu bul, kime ait olduğunu formda göster
+      try {
+        const all = await api.getAllReservations();
+        const active = (Array.isArray(all) ? all : []).find((r) => r.book_id === book.id && r.status === "active");
+        reservedUserId = active?.user_id;
+      } catch {
+        // bulunamazsa boş bırak, admin manuel seçer
+      }
+    }
+
+    setOriginalReservedUserId(reservedUserId);
     setForm({ 
         title: book.title || "", 
         author: book.author || "", 
-        isbn: book.isbn || "", 
+        isbn: book.isbn || (book as any).ısbn || "",
         genre: book.genre || "", 
         publish_date: dateStr, 
         available: book.available ?? true, 
+        reservedUserId,
         description: book.description || "" 
     });
     setModal({ open: true, editing: book });
@@ -86,6 +109,12 @@ export default function ManageBooksPage() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (form.available === false && !form.reservedUserId) {
+      showToast("Kitabı 'Dolu' yapmak için kime rezerve edildiğini seçmelisiniz");
+      return;
+    }
+
     setSaving(true);
     try {
       // Go (Gin) backend'inin time.Time'ı hatasız parse edebilmesi için tarihi ISO 8601 formatına çeviriyoruz
@@ -95,22 +124,49 @@ export default function ManageBooksPage() {
           publish_date: form.publish_date ? new Date(form.publish_date).toISOString() : new Date().toISOString()
       };
 
+      let bookId = modal.editing?.id;
+      let updatedBookForState: Book;
+
       if (modal.editing) {
         const updated = await api.updateBook(modal.editing.id, payload as any);
-        const updatedBook = { ...modal.editing, ...updated } as Book;
-        setBooks((bs) => (Array.isArray(bs) ? bs : []).map((b) => (b?.id === modal.editing!.id ? updatedBook : b)));
-        showToast("Kitap güncellendi");
+        updatedBookForState = { ...modal.editing, ...updated } as Book;
+        setBooks((bs) => (Array.isArray(bs) ? bs : []).map((b) => (b?.id === modal.editing!.id ? updatedBookForState : b)));
       } else {
         const added = await api.addBook(payload as any);
+        bookId = added.id;
+        updatedBookForState = added;
         setBooks((bs) => [added, ...(Array.isArray(bs) ? bs : [])]);
-        showToast("Kitap eklendi");
       }
+
+      // "Dolu" -> önceden farklı biri rezerveliyse ya da yeni Dolu yapıldıysa yeni rezervasyon aç
+      const wasAvailable = modal.editing ? modal.editing.available !== false : true;
+      const holderChanged = form.reservedUserId !== originalReservedUserId;
+
+      if (form.available === false && bookId && (wasAvailable || holderChanged)) {
+        // Önce eski rezervasyon varsa kapat (kişi değiştiyse)
+        if (!wasAvailable) {
+          await cancelActiveReservation(bookId);
+        }
+        await api.createReservation({ book_id: bookId, user_id: form.reservedUserId! } as any);
+      } else if (form.available !== false && !wasAvailable && bookId) {
+        // "Mevcut"a çekildi, önceki aktif rezervasyonu iptal et
+        await cancelActiveReservation(bookId);
+      }
+
+      showToast(modal.editing ? "Kitap güncellendi" : "Kitap eklendi");
       setModal({ open: false, editing: null });
+      load(); // durum (available) her zaman rezervasyon tablosundan hesaplandığı için listeyi tazele
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "İşlem başarısız");
     } finally {
       setSaving(false);
     }
+  };
+
+  const cancelActiveReservation = async (bookId: number) => {
+    const all = await api.getAllReservations();
+    const active = (Array.isArray(all) ? all : []).find((r) => r.book_id === bookId && r.status === "active");
+    if (active) await api.updateReservation(active.id, { status: "cancelled" } as any);
   };
 
   const del = async (book: Book) => {
@@ -263,7 +319,6 @@ export default function ManageBooksPage() {
               <FormField label="Tür *" value={form.genre} onChange={(v) => setForm((f) => ({ ...f, genre: v }))} required />
             </div>
             
-            {/* Tarih Input'u Değiştirildi */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--foreground)" }}>Yayın Tarihi *</label>
@@ -290,6 +345,19 @@ export default function ManageBooksPage() {
                 </select>
               </div>
             </div>
+
+            {/* Yeni Aramalı Seçim (Searchable Dropdown) Bölümü */}
+            {form.available === false && (
+              <div>
+                <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--foreground)" }}>Kime rezerve edildi? *</label>
+                <SearchableUserSelect 
+                  users={users} 
+                  value={form.reservedUserId} 
+                  onChange={(val) => setForm((f) => ({ ...f, reservedUserId: val }))} 
+                />
+              </div>
+            )}
+            
             <div>
               <label className="block text-sm font-semibold mb-1.5" style={{ color: "var(--foreground)" }}>Açıklama *</label>
               <textarea
@@ -335,6 +403,8 @@ export default function ManageBooksPage() {
   );
 }
 
+// --- YARDIMCI BİLEŞENLER ---
+
 function FormField({ label, value, onChange, required, type = "text" }: { label: string; value: string; onChange: (v: string) => void; required?: boolean; type?: string }) {
   return (
     <div>
@@ -375,6 +445,75 @@ function LoadingSkeleton() {
           <div className="h-4 rounded w-16" style={{ backgroundColor: "var(--muted)" }} />
         </div>
       ))}
+    </div>
+  );
+}
+
+function SearchableUserSelect({ users, value, onChange }: { users: any[], value: number | undefined, onChange: (val: number | undefined) => void }) {
+  const [search, setSearch] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+
+  const selectedUser = users.find(u => u.id === value);
+
+  // 1. Dışarıdan veya içeriden bir seçim yapıldığında input içine E-POSTA yaz
+  useEffect(() => {
+    if (selectedUser) {
+      setSearch(selectedUser.email);
+    } else {
+      setSearch("");
+    }
+  }, [selectedUser]);
+
+  // 2. Arama filtresini E-POSTA'ya göre yap
+  const filtered = users.filter(u => 
+    (u.email || "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        placeholder="E-posta ara ve seç..."
+        value={search}
+        onFocus={() => setIsOpen(true)}
+        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+        onChange={(e) => {
+           setSearch(e.target.value);
+           setIsOpen(true);
+           onChange(undefined);
+        }}
+        className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+        style={{ backgroundColor: "var(--muted)", border: "1.5px solid var(--border)", color: "var(--foreground)" }}
+      />
+      
+      {/* Açılır Liste (Dropdown) */}
+      {isOpen && (
+        <div 
+          className="absolute top-full mt-1 left-0 right-0 z-50 rounded-xl shadow-lg max-h-48 overflow-y-auto" 
+          style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
+        >
+          {filtered.length === 0 ? (
+            <div className="px-4 py-3 text-sm opacity-50 text-center">E-posta bulunamadı</div>
+          ) : (
+            filtered.map(u => (
+              <div
+                key={u.id}
+                className="px-4 py-2.5 text-sm cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex justify-between items-center"
+                style={{ borderBottom: "1px solid var(--border)" }}
+                onMouseDown={() => { 
+                  onChange(u.id);
+                  setSearch(u.email); // Seçildiğinde kutuya e-postayı yaz
+                  setIsOpen(false);
+                }}
+              >
+                {/* 3. Listede e-postayı göster (yanında bilgi amaçlı silik renkte isim de yazsın) */}
+                <span className="font-medium">{u.email}</span>
+                <span className="text-xs opacity-50">{u.first_name} {u.last_name}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -7,9 +7,10 @@ import ManageBooksPage from "./pages/ManageBooksPage";
 import ManageUsersPage from "./pages/ManageUsersPage";
 import AllReservationsPage from "./pages/AllReservationsPage";
 import ChatPage from "./pages/ChatPage";
+import ProfilePage from "./pages/ProfilePage";
 import Sidebar from "./components/Sidebar";
 
-type Page = "books" | "reservations" | "manage-books" | "manage-users" | "all-reservations" | "chat";
+type Page = "books" | "reservations" | "manage-books" | "manage-users" | "all-reservations" | "chat" | "profile";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -44,6 +45,11 @@ export default function App() {
     setUser(null);
   };
 
+  const handleUserUpdate = (u: User) => {
+    localStorage.setItem("user", JSON.stringify(u));
+    setUser(u);
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center text-white" style={{ backgroundColor: "var(--background)" }}>
@@ -70,6 +76,8 @@ export default function App() {
         return user.role === "admin" ? <AllReservationsPage /> : <ReservationsPage userId={user.id} />;
       case "chat":
         return <ChatPage />;
+      case "profile":
+        return <ProfilePage user={user} onUpdate={handleUserUpdate} />;
       default:
         return <BooksPage userId={user.id} />;
     }

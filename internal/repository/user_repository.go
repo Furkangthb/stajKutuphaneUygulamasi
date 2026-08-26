@@ -40,8 +40,6 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id int64) (*domain.User, error) {
-	// Not: eski sorguda phone/email seçiliyordu ama Scan'e hiç verilmemişti (kolon sayısı uyuşmazlığı,
-	// runtime'da "sql: expected N destination arguments in Scan" hatası verirdi) ve created_at hiç seçilmiyordu.
 	query := `SELECT id,first_name,last_name,phone,email,password_hash,role,created_at
 			FROM "users"
 			WHERE id=$1`
@@ -119,4 +117,20 @@ func (r *UserRepository) List(ctx context.Context, limit, ofset int) ([]*domain.
 		return nil, err
 	}
 	return users, nil
+}
+
+func (r *UserRepository) UpdatePassword(ctx context.Context, id int64, passwordHash string) error {
+	query := `UPDATE users SET password_hash=$1 WHERE id=$2`
+	result, err := r.db.ExecContext(ctx, query, passwordHash, id)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }

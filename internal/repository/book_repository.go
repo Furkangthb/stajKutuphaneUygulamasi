@@ -32,7 +32,7 @@ func (r *BookRepository) BookGetByID(ctx context.Context, id int64) (*domain.Boo
 	query := `SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
 			NOT EXISTS (
 				SELECT 1 FROM reservations res
-				WHERE res.book_id = b.id AND res.status IN ('pending','active')
+				WHERE res.book_id = b.id AND res.status='active'
 			) AS available
 			FROM books b
 			WHERE b.id=$1`
@@ -89,7 +89,7 @@ func (r *BookRepository) BookList(ctx context.Context, limit, offset int) ([]*do
 	query := `SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
 			NOT EXISTS (
 				SELECT 1 FROM reservations res
-				WHERE res.book_id = b.id AND res.status IN ('pending','active')
+				WHERE res.book_id = b.id AND res.status='active'
 			) AS available
 			FROM books b
 			ORDER BY b.id
@@ -133,7 +133,7 @@ func (r *BookRepository) BookSearch(ctx context.Context, limit int, keywords []s
 	query := fmt.Sprintf(`SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
 			NOT EXISTS (
 				SELECT 1 FROM reservations res
-				WHERE res.book_id = b.id AND res.status IN ('pending','active')
+				WHERE res.book_id = b.id AND res.status='active'
 			) AS available
 			FROM books b
 			WHERE %s

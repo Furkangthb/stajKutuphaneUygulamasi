@@ -23,4 +23,5 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id int64) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	List(ctx context.Context, limit, offset int) ([]*User, error)
+	UpdatePassword(ctx context.Context, id int64, passwordHash string) error
 }

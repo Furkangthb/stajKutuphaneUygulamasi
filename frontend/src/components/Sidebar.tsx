@@ -68,23 +68,37 @@ export default function Sidebar({ user, active, onNavigate, onLogout }: SidebarP
       </nav>
 
       <div className="px-3 py-4 border-t border-white/10">
-        <div
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1"
-          style={{ backgroundColor: "var(--sidebar-muted)" }}
+        <button
+          onClick={() => onNavigate("profile")}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 cursor-pointer transition-all duration-150"
+          style={{
+            backgroundColor: active === "profile" ? "var(--sidebar-accent)" : "var(--sidebar-muted)",
+          }}
         >
           <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold uppercase"
-            style={{ backgroundColor: "var(--sidebar-accent)", color: "#12110F" }}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold uppercase shrink-0"
+            style={{
+              backgroundColor: active === "profile" ? "#12110F" : "var(--sidebar-accent)",
+              color: active === "profile" ? "var(--sidebar-accent)" : "#12110F",
+            }}
           >
             {user.first_name?.[0] ?? "U"}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate" style={{ color: "var(--sidebar-foreground)" }}>
+          <div className="flex-1 min-w-0 text-left">
+            <p
+              className="text-sm font-semibold truncate"
+              style={{ color: active === "profile" ? "#12110F" : "var(--sidebar-foreground)" }}
+            >
               {user.first_name}
             </p>
-            <p className="text-xs opacity-40 capitalize">{user.role}</p>
+            <p
+              className="text-xs capitalize"
+              style={{ color: active === "profile" ? "rgba(18,17,15,0.6)" : "rgba(232,230,224,0.4)" }}
+            >
+              {user.role}
+            </p>
           </div>
-        </div>
+        </button>
         <button
           onClick={onLogout}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer"

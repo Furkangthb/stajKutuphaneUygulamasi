@@ -43,3 +43,45 @@ type ReservationRepository interface {
 	Update(ctx context.Context, id int, status string) error
 	GetByUserID(ctx context.Context, userId int) ([]*ReservationWithUser, error)
 }
+
+const (
+	StatusActive    = "active"
+	StatusCompleted = "completed"
+	StatusCancelled = "cancelled"
+	StatusExpired   = "expired"
+)
+
+var reservationTransitions = map[string][]string{
+	StatusActive:    {StatusCompleted, StatusCancelled, StatusExpired},
+	StatusCompleted: {},
+	StatusCancelled: {},
+	StatusExpired:   {},
+}
+
+func IsValidStatus(status string) bool {
+	_, ok := reservationTransitions[status]
+	return ok
+}
+
+func CanTransition(from, to string) bool {
+	allowed, ok := reservationTransitions[from]
+	if !ok {
+		return false
+	}
+	for _, s := range allowed {
+		if s == to {
+			return true
+		}
+	}
+	return false
+}
+
+func CanUserTransition(role, from, to string) bool {
+	if !CanTransition(from, to) {
+		return false
+	}
+	if role == "admin" {
+		return true
+	}
+	return to == StatusCancelled
+}

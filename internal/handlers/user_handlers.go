@@ -67,6 +67,17 @@ func (h *UserHandlers) UserLogin(c *gin.Context) {
 	c.JSON(200, user)
 }
 
+// UserDelete godoc
+// @Summary Kullanıcı Silme
+// @Description Kullanıcıyı siler. Bearer token ve Admin yetkisi gerektirir.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Kullanıcı ID"
+// @Success 204 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/users/{id} [delete]
 func (h *UserHandlers) UserDelete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -85,6 +96,17 @@ func (h *UserHandlers) UserDelete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// UserGet godoc
+// @Summary Kullanıcı Bilgilerini Getir
+// @Description Kullanıcı bilgilerini getirir. Bearer token gerektirir.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Kullanıcı ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/users/{id} [get]
 func (h *UserHandlers) UserGet(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -110,6 +132,18 @@ type UserRework struct {
 	Role      string `json:"role" binding:"required"`
 }
 
+// UserUpdate godoc
+// @Summary Kullanıcı Güncelleme
+// @Description Kullanıcı bilgilerini günceller. Bearer token gerektirir.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Kullanıcı ID"
+// @Param request body UserRework true "Kullanıcı Güncellemesi"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/users/{id} [put]
 func (h *UserHandlers) UserUpdate(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -154,7 +188,19 @@ func (h *UserHandlers) UserUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
-func (h UserHandlers) UserList(c *gin.Context) {
+// UserList godoc
+// @Summary Kullanıcıları Listeleme
+// @Description Tüm kullanıcıları listeler. Bearer token ve Admin yetkisi gerektirir.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param page query int false "Sayfa numarası"
+// @Param page_size query int false "Sayfa boyutu"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /api/users [get]
+func (h *UserHandlers) UserList(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	page_size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
@@ -169,4 +215,32 @@ func (h UserHandlers) UserList(c *gin.Context) {
 		"data": users,
 		"page": page,
 	})
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=6"`
+}
+
+func (h *UserHandlers) UserChangePassword(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(400, gin.H{"Hata": err.Error()})
+		return
+	}
+	tokenUserID := c.GetInt("user_id")
+	if int64(tokenUserID) != id {
+		c.JSON(http.StatusForbidden, gin.H{"Hata": "sadece kendi sifrenizi degistirebilirsiniz"})
+		return
+	}
+	var istek ChangePasswordRequest
+	if err := c.ShouldBindJSON(&istek); err != nil {
+		c.JSON(400, gin.H{"Hata": err.Error()})
+		return
+	}
+	if err := h.userService.UserChangePassword(c.Request.Context(), id, istek.CurrentPassword, istek.NewPassword); err != nil {
+		c.JSON(400, gin.H{"Hata": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"mesaj": "sifre basariyla guncellendi"})
 }

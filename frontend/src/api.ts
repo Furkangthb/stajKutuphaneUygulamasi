@@ -56,6 +56,8 @@ export const api = {
   deleteUser: (id: number) => req<void>("DELETE", `/users/${id}`),
   updateUser: (id: number, data: Partial<User>) => req<User>("PUT", `/users/${id}`, data),
   getUser: (id: number) => req<User>("GET", `/users/${id}`),
+  changePassword: (id: number, data: { current_password: string; new_password: string }) =>
+    req<{ mesaj: string }>("PUT", `/users/${id}/password`, data),
 
   // Kitaplar
   getBooks: (limit: number = 100) => req<Book[]>("GET", `/books?page=1&page_size=${limit}`),
@@ -65,7 +67,7 @@ export const api = {
   deleteBook: (id: number) => req("DELETE", `/books/${id}`, undefined),
 
   // Rezervasyonlar
-  createReservation: (data: { book_id: number; user_id: number; status: string }) =>
+  createReservation: (data: { book_id: number; user_id?: number }) =>
     req<Reservation>("POST", "/reservation", data),
   updateReservation: (id: number, data: Partial<Reservation>) =>
     req<Reservation>("PUT", `/reservation/${id}`, data),
@@ -73,6 +75,10 @@ export const api = {
     req<Reservation[]>("GET", `/reservation/${userId}`),
 
   getAllReservations: () => req<ReservationFull[]>("GET", "/reservations"),
+
+  // Sohbet
+  getChatHistory: (limit = 50) =>
+    req<{ data: ChatMessage[] }>("GET", `/chat/history?limit=${limit}`),
 };
 
 
@@ -124,4 +130,12 @@ export interface ReservationFull {
   last_name: string;
   book_title: string;
   book_author: string;
+}
+
+export interface ChatMessage {
+  ID: number;
+  UserID: number;
+  Role: "user" | "assistant";
+  Message: string;
+  CreatedAt: string;
 }

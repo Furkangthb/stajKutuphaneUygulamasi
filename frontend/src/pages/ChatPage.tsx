@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { api } from "../api";
 
 interface Message {
   id: number;
@@ -14,20 +15,47 @@ const SUGGESTIONS = [
   "Rezervasyonumu nasıl iptal ederim?",
 ];
 
+const WELCOME_MESSAGE: Message = {
+  id: 0,
+  role: "assistant",
+  content: "Merhaba! Kütüphane asistanınım. Kitap önerileri, rezervasyon bilgileri veya koleksiyon hakkında sormak istediğiniz her şeyi sorabilirsiniz.",
+  ts: new Date(),
+};
+
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 0,
-      role: "assistant",
-      content: "Merhaba! Kütüphane asistanınım. Kitap önerileri, rezervasyon bilgileri veya koleksiyon hakkında sormak istediğiniz her şeyi sorabilirsiniz.",
-      ts: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const idRef = useRef(1);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getChatHistory(50);
+        if (cancelled) return;
+        if (res.data && res.data.length > 0) {
+          const gecmisMesajlar: Message[] = res.data.map((m) => ({
+            id: idRef.current++,
+            role: m.Role === "assistant" ? "assistant" : "user",
+            content: m.Message,
+            ts: new Date(m.CreatedAt),
+          }));
+          setMessages([WELCOME_MESSAGE, ...gecmisMesajlar]);
+        }
+      } catch (e) {
+        console.error("Sohbet geçmişi yüklenemedi:", e);
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -104,6 +132,11 @@ export default function ChatPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+        {historyLoading && (
+          <div className="flex items-center justify-center py-6">
+            <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Sohbet geçmişi yükleniyor…</span>
+          </div>
+        )}
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -165,7 +198,7 @@ export default function ChatPage() {
       </div>
 
       {/* Suggestions — shown only at start */}
-      {messages.length === 1 && (
+      {!historyLoading && messages.length === 1 && (
         <div className="px-6 pb-3 flex flex-wrap gap-2">
           {SUGGESTIONS.map((s) => (
             <button

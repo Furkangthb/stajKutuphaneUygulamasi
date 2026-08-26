@@ -93,3 +93,24 @@ func (s *UserServices) UserList(ctx context.Context, page int, page_size int) ([
 	}
 	return users, nil
 }
+
+func (s *UserServices) UserChangePassword(ctx context.Context, id int64, currentPassword string, newPassword string) error {
+	user, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return errors.New("kullanici bulunamadi")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(currentPassword)); err != nil {
+		return errors.New("mevcut sifre hatali")
+	}
+	if len(newPassword) < 6 {
+		return errors.New("yeni sifre en az 6 karakter olmali")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return errors.New("sifre hashlenemedi")
+	}
+	if err := s.repo.UpdatePassword(ctx, id, string(hash)); err != nil {
+		return errors.New("sifre guncellenemedi")
+	}
+	return nil
+}
