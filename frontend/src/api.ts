@@ -112,7 +112,7 @@ export interface Reservation {
   id: number;
   user_id: number;
   book_id: number;
-  status: "active" | "completed" | "cancelled" | "expired";
+  status: "pending" | "active" | "completed" | "cancelled" | "expired";
   reserved_at?: string;
   due_date?: string;
   book?: Book;
@@ -123,7 +123,7 @@ export interface ReservationFull {
   id: number;
   user_id: number;
   book_id: number;
-  status: "active" | "completed" | "cancelled" | "expired";
+  status: "pending" | "active" | "completed" | "cancelled" | "expired";
   reserved_at: string;
   due_date: string;
   first_name: string;

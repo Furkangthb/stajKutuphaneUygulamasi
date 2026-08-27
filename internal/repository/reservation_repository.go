@@ -6,19 +6,26 @@ import (
 	"errors"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
+	"github.com/redis/go-redis/v9"
 )
 
 var (
-	ErrBookNotFound     = errors.New("kitap bulunamadi")
-	ErrBookNotAvailable = errors.New("kitap su anda musait degil")
+	ErrBookNotFound             = errors.New("kitap bulunamadi")
+	ErrBookNotAvailable         = errors.New("kitap su anda musait degil")
+	ErrReservationLimitExceeded = errors.New("acik rezervasyon limitine ulasildi")
 )
 
 type ReservationRepository struct {
-	db *sql.DB
+	db    *sql.DB
+	redis *redis.Client
 }
 
-func NewResservationRepository(db *sql.DB) *ReservationRepository {
-	return &ReservationRepository{db: db}
+func NewResservationRepository(db *sql.DB, redisClient *redis.Client) *ReservationRepository {
+	return &ReservationRepository{db: db, redis: redisClient}
+}
+
+func (r *ReservationRepository) refreshBookCache(ctx context.Context, bookID int) {
+	refreshBookCacheEntry(ctx, r.db, r.redis, int64(bookID))
 }
 
 func (r *ReservationRepository) ReservationCreate(ctx context.Context, reservation *domain.Reservation) error {
@@ -37,9 +44,21 @@ func (r *ReservationRepository) ReservationCreate(ctx context.Context, reservati
 		return ErrBookNotFound
 	}
 
+	var openCount int
+	err = tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM reservations WHERE user_id=$1 AND status IN ('pending','active')`,
+		reservation.UserID,
+	).Scan(&openCount)
+	if err != nil {
+		return err
+	}
+	if openCount >= domain.MaxActiveReservationsPerUser {
+		return ErrReservationLimitExceeded
+	}
+
 	var alreadyReserved bool
 	err = tx.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM reservations WHERE book_id=$1 AND status='active')`,
+		`SELECT EXISTS(SELECT 1 FROM reservations WHERE book_id=$1 AND status IN ('pending','active'))`,
 		reservation.BookID,
 	).Scan(&alreadyReserved)
 	if err != nil {
@@ -55,7 +74,11 @@ func (r *ReservationRepository) ReservationCreate(ctx context.Context, reservati
 		return err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	r.refreshBookCache(ctx, reservation.BookID)
+	return nil
 }
 
 func (r *ReservationRepository) ReservationUpdate(ctx context.Context, reservation *domain.Reservation) error {
@@ -87,7 +110,11 @@ func (r *ReservationRepository) ReservationUpdate(ctx context.Context, reservati
 		return sql.ErrNoRows
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	r.refreshBookCache(ctx, bookID)
+	return nil
 }
 
 func (r *ReservationRepository) ReservationGetByID(ctx context.Context, id int) (*domain.Reservation, error) {

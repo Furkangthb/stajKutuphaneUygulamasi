@@ -104,6 +104,23 @@ services:
       networks:
         stajKutuphaneNetwork:
           ipv4_address: 172.20.0.6
+
+  minio:
+      image: minio/minio
+      container_name: kutuphane_minio
+      ports:
+        - "9000:9000"  
+        - "9001:9001"  
+      volumes:
+        - minio-data:/data
+      environment:
+        - MINIO_ROOT_USER=${MINIO_ROOT_USER} 
+        - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      command: server /data --console-address ":9001"
+      networks:
+        stajKutuphaneNetwork:
+          ipv4_address: 172.20.0.7
+  
 volumes:
   redis-data:
     driver: local
@@ -112,6 +129,8 @@ volumes:
   go-bin:
     driver: local
   go-pkg:
+    driver: local
+  minio-data:
     driver: local
 
 networks:

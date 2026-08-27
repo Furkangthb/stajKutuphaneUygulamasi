@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Reservation, type ReservationFull } from "../api";
 
 const STATUS_LABELS: Record<string, string> = {
+  pending: "Onay Bekliyor",
   active: "Aktif",
   completed: "İade Edildi",
   cancelled: "İptal Edildi",
@@ -9,15 +10,16 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  pending: { bg: "#EDE9FE", text: "#5B21B6" },
   active: { bg: "#D1FAE5", text: "#065F46" },
   completed: { bg: "#DBEAFE", text: "#1E40AF" },
   cancelled: { bg: "#FEE2E2", text: "#991B1B" },
   expired: { bg: "#FEF3C7", text: "#92400E" },
 };
 
-const STATUS_FILTERS = ["Tümü", "Aktif", "İade Edildi", "İptal Edildi", "Süresi Doldu"];
+const STATUS_FILTERS = ["Tümü", "Onay Bekliyor", "Aktif", "İade Edildi", "İptal Edildi", "Süresi Doldu"];
 const STATUS_MAP: Record<string, string> = {
-  "Aktif": "active", "İade Edildi": "completed", "İptal Edildi": "cancelled", "Süresi Doldu": "expired",
+  "Onay Bekliyor": "pending", "Aktif": "active", "İade Edildi": "completed", "İptal Edildi": "cancelled", "Süresi Doldu": "expired",
 };
 
 interface ReservationsPageProps {
@@ -25,22 +27,40 @@ interface ReservationsPageProps {
 }
 
 export default function ReservationsPage({ userId }: ReservationsPageProps) {
-  // Veritabanından kitap adı da geleceği için ReservationFull tipine esnetildi
   const [reservations, setReservations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("Tümü");
+  const [cancelingId, setCancelingId] = useState<number | null>(null);
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     api.getUserReservations(userId)
       .then((res: any) => {
-        // Güvenli dizi (array) kontrolü
         const dataList = Array.isArray(res) ? res : (res?.data || res?.reservations || []);
         setReservations(dataList);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [userId]);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3000);
+  };
+
+  const cancelReservation = async (id: number) => {
+    setCancelingId(id);
+    try {
+      await api.updateReservation(id, { status: "cancelled" });
+      setReservations((rs) => rs.map((r) => (r.id === id ? { ...r, status: "cancelled" } : r)));
+      showToast("Rezervasyon iptal edildi");
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "İptal edilemedi");
+    } finally {
+      setCancelingId(null);
+    }
+  };
 
   const filteredReservations = reservations.filter(
     (r) => statusFilter === "Tümü" || r.status === STATUS_MAP[statusFilter]
@@ -93,31 +113,43 @@ export default function ReservationsPage({ userId }: ReservationsPageProps) {
         ) : (
           <div className="space-y-3 max-w-2xl">
             {filteredReservations.map((res) => (
-              <ReservationCard key={res.id} reservation={res} />
+              <ReservationCard
+                key={res.id}
+                reservation={res}
+                canceling={cancelingId === res.id}
+                onCancel={() => cancelReservation(res.id)}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 px-5 py-3 rounded-xl text-sm font-semibold shadow-lg z-50" style={{ backgroundColor: "var(--sidebar)", color: "var(--sidebar-foreground)" }}>
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
 
-function ReservationCard({ reservation }: { reservation: any }) {
+function ReservationCard({ reservation, canceling, onCancel }: { reservation: any; canceling: boolean; onCancel: () => void }) {
   const sc = STATUS_COLORS[reservation.status] ?? { bg: "#F3F4F6", text: "#6B7280" };
-  
-  // Backend bazen kitap adını göndermeyebilir, defansif kodlama:
+
   const title = reservation.book_title || reservation.book?.title || `Kitap #${reservation.book_id}`;
   const author = reservation.book_author || reservation.book?.author || "";
 
-  // Gecikme Kontrolü
   const isOverdue = reservation.due_date && new Date(reservation.due_date) < new Date() && reservation.status === "active";
+  // Sadece onay bekleyen (henüz kitap teslim edilmemiş) talepler kullanıcı tarafından iptal edilebilir.
+  // "active" (kitap elinde) durumundaki bir rezervasyon fiziksel iade gerektirdiği için sadece kütüphaneci "tamamlandı" yapabilir.
+  const canCancel = reservation.status === "pending";
 
   return (
     <div
       className="rounded-2xl p-5 flex items-start gap-4 transition-all"
-      style={{ 
-        backgroundColor: "var(--card)", 
-        border: `1px solid ${isOverdue ? "#FCA5A5" : "var(--border)"}` 
+      style={{
+        backgroundColor: "var(--card)",
+        border: `1px solid ${isOverdue ? "#FCA5A5" : "var(--border)"}`
       }}
     >
       <div
@@ -140,7 +172,7 @@ function ReservationCard({ reservation }: { reservation: any }) {
           </span>
         </div>
         {author && <p className="text-xs mb-2" style={{ color: "var(--muted-foreground)" }}>{author}</p>}
-        
+
         <div className="flex gap-4 mt-1">
           {reservation.reserved_at && (
             <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
@@ -155,8 +187,18 @@ function ReservationCard({ reservation }: { reservation: any }) {
           )}
         </div>
 
-        {/* Durum değişikliği (iptal/iade) artık kullanıcının elinde değil,
-            kütüphaneci masasından (admin) yapılıyor — bu kart salt-okunur. */}
+        {canCancel && (
+          <div className="mt-3">
+            <button
+              onClick={onCancel}
+              disabled={canceling}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
+              style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}
+            >
+              {canceling ? "İptal ediliyor…" : "Talebi İptal Et"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

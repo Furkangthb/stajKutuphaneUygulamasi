@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"log"
 	"os"
 	"time"
 
@@ -33,11 +35,15 @@ func main() {
 	userService := services.NewUserServices(userRepo)
 	userHandlers := handlers.NewUserHandlers(userService)
 
-	bookRepo := repository.NewBookRepository(database.DB)
+	bookRepo := repository.NewBookRepository(database.DB, database.RedisClient)
 	bookService := services.NewBookServices(bookRepo)
 	bookHandlers := handlers.NewBookHandlers(bookService)
 
-	reservationRepo := repository.NewResservationRepository(database.DB)
+	if err := bookRepo.WarmupCache(context.Background()); err != nil {
+		log.Printf("Redis warmup basarisiz (uygulama yine de calisacak): %v", err)
+	}
+
+	reservationRepo := repository.NewResservationRepository(database.DB, database.RedisClient)
 	reservationService := services.NewReservationServices(reservationRepo)
 	reservationHandlers := handlers.NewReservationHandler(reservationService)
 
@@ -61,7 +67,6 @@ func main() {
 	}))
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.POST("/api/chat", middleware.RequireAuth(authService), chatHandlers.Chat)
-	r.GET("/api/chat/history", middleware.RequireAuth(authService), chatHandlers.ChatHistory)
 
 	r.POST("/api/users/register", userHandlers.UserRegister)
 	r.POST("/api/auth/login", authHandler.Login)

@@ -22,6 +22,7 @@ export default function BooksPage({ userId }: BooksPageProps) {
   
   const [reserving, setReserving] = useState<number | null>(null);
   const [toast, setToast] = useState("");
+  const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
 
   useEffect(() => {
     // Sayfa açıldığında tüm kitapları (api limitine göre) çekiyoruz
@@ -56,6 +57,7 @@ export default function BooksPage({ userId }: BooksPageProps) {
       showToast(`"${book.title}" başarıyla rezerve edildi!`);
       // Rezerve edilen kitabı ana listede (allBooks) de güncelliyoruz
       setAllBooks((bs) => bs.map((b) => (b.id === book.id ? { ...b, available: false } : b)));
+      setSelectedBookId(null); // Detay modalı açıksa kapat (modal'ın kendi kopyası tazelenmiyor)
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "Rezervasyon başarısız");
     } finally {
@@ -144,6 +146,7 @@ export default function BooksPage({ userId }: BooksPageProps) {
                   key={book.id}
                   book={book}
                   onReserve={reserve}
+                  onOpenDetail={() => setSelectedBookId(book.id)}
                   reserving={reserving === book.id}
                 />
               ))}
@@ -173,18 +176,35 @@ export default function BooksPage({ userId }: BooksPageProps) {
           {toast}
         </div>
       )}
+
+      {selectedBookId !== null && (
+        <BookDetailModal
+          bookId={selectedBookId}
+          onClose={() => setSelectedBookId(null)}
+          onReserve={reserve}
+          reserving={reserving === selectedBookId}
+        />
+      )}
     </div>
   );
 }
 
-function BookCard({ book, onReserve, reserving }: { book: Book; onReserve: (b: Book) => void; reserving: boolean }) {
+function BookCard({
+  book, onReserve, onOpenDetail, reserving,
+}: {
+  book: Book;
+  onReserve: (b: Book) => void;
+  onOpenDetail: () => void;
+  reserving: boolean;
+}) {
   const colors = ["#DBEAFE", "#FEF3C7", "#D1FAE5", "#F3E8FF", "#FFE4E6"];
   const bg = colors[book.id % colors.length];
 
   return (
     <div
       // group sınıfını ekledik ki fare tüm karta geldiğinde efekti tetiklesin
-      className="group relative rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5 flex flex-col h-full"
+      onClick={onOpenDetail}
+      className="group relative rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5 flex flex-col h-full cursor-pointer"
       style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
     >
       <div className="h-36 relative flex items-center justify-center shrink-0" style={{ backgroundColor: bg }}>
@@ -230,7 +250,7 @@ function BookCard({ book, onReserve, reserving }: { book: Book; onReserve: (b: B
 
         <button
           disabled={book.available === false || reserving}
-          onClick={() => onReserve(book)}
+          onClick={(e) => { e.stopPropagation(); onReserve(book); }}
           className="w-full mt-auto py-2 rounded-lg text-sm font-semibold transition-all duration-150 cursor-pointer relative z-10"
           style={{
             backgroundColor: book.available !== false && !reserving ? "var(--primary)" : "var(--muted)",
@@ -239,6 +259,134 @@ function BookCard({ book, onReserve, reserving }: { book: Book; onReserve: (b: B
         >
           {reserving ? "Rezerve ediliyor…" : book.available !== false ? "Rezerve Et" : "Müsait Değil"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function BookDetailModal({
+  bookId, onClose, onReserve, reserving,
+}: {
+  bookId: number;
+  onClose: () => void;
+  onReserve: (b: Book) => void;
+  reserving: boolean;
+}) {
+  const [book, setBook] = useState<Book | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    // Kitabın tam detayını backend'den (GET /api/books/:id) çekiyoruz —
+    // liste sayfasında zaten elimizde olan özet veri yerine, kaynağından tazesini alıyoruz.
+    api.getBook(bookId)
+      .then((b) => { if (!cancelled) setBook(b); })
+      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : "Kitap yüklenemedi"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [bookId]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg rounded-2xl overflow-hidden"
+        style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)" }}
+      >
+        {loading ? (
+          <div className="p-10 flex items-center justify-center">
+            <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>Yükleniyor…</span>
+          </div>
+        ) : error ? (
+          <div className="p-8 flex flex-col items-center gap-3">
+            <p className="text-sm font-semibold" style={{ color: "#DC2626" }}>{error}</p>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer"
+              style={{ backgroundColor: "var(--muted)", color: "var(--foreground)" }}
+            >
+              Kapat
+            </button>
+          </div>
+        ) : book ? (
+          <div>
+            <div className="h-40 relative flex items-center justify-center" style={{ backgroundColor: "#DBEAFE" }}>
+              <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              </svg>
+              <button
+                onClick={onClose}
+                className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer"
+                style={{ backgroundColor: "rgba(255,255,255,0.9)", color: "#111" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-start justify-between gap-3 mb-1">
+                <h2 className="font-display text-xl leading-snug" style={{ color: "var(--foreground)" }}>
+                  {book.title || "İsimsiz Kitap"}
+                </h2>
+                <span
+                  className="shrink-0 mt-0.5 px-2 py-0.5 rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: book.available !== false ? "#D1FAE5" : "#FEE2E2",
+                    color: book.available !== false ? "#065F46" : "#991B1B",
+                  }}
+                >
+                  {book.available !== false ? "Mevcut" : "Dolu"}
+                </span>
+              </div>
+
+              <p className="text-sm font-medium mb-3" style={{ color: "var(--muted-foreground)" }}>
+                {book.author || "Bilinmeyen Yazar"}
+              </p>
+
+              <div className="flex flex-wrap gap-2 mb-4">
+                {book.genre && (
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-semibold" style={{ backgroundColor: "var(--muted)", color: "var(--foreground)" }}>
+                    {book.genre}
+                  </span>
+                )}
+                {book.isbn && (
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-semibold" style={{ backgroundColor: "var(--muted)", color: "var(--foreground)" }}>
+                    ISBN: {book.isbn}
+                  </span>
+                )}
+                {book.publish_date && (
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-semibold" style={{ backgroundColor: "var(--muted)", color: "var(--foreground)" }}>
+                    {book.publish_date.split("T")[0]}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-sm leading-relaxed mb-6" style={{ color: "var(--foreground)" }}>
+                {book.description || "Bu kitap için henüz bir açıklama girilmemiş."}
+              </p>
+
+              <button
+                disabled={book.available === false || reserving}
+                onClick={() => onReserve(book)}
+                className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 cursor-pointer"
+                style={{
+                  backgroundColor: book.available !== false && !reserving ? "var(--primary)" : "var(--muted)",
+                  color: book.available !== false && !reserving ? "var(--primary-foreground)" : "var(--muted-foreground)",
+                }}
+              >
+                {reserving ? "Rezerve ediliyor…" : book.available !== false ? "Rezerve Et" : "Müsait Değil"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

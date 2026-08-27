@@ -45,13 +45,17 @@ type ReservationRepository interface {
 }
 
 const (
+	StatusPending   = "pending"
 	StatusActive    = "active"
 	StatusCompleted = "completed"
 	StatusCancelled = "cancelled"
 	StatusExpired   = "expired"
 )
 
+const MaxActiveReservationsPerUser = 3
+
 var reservationTransitions = map[string][]string{
+	StatusPending:   {StatusActive, StatusCancelled},
 	StatusActive:    {StatusCompleted, StatusCancelled, StatusExpired},
 	StatusCompleted: {},
 	StatusCancelled: {},

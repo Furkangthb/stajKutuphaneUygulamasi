@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type ReservationFull, type Reservation } from "../api";
 
 const STATUS_LABELS: Record<string, string> = {
+  pending: "Onay Bekliyor",
   active: "Aktif",
   completed: "Tamamlandı",
   cancelled: "İptal Edildi",
@@ -9,15 +10,16 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  pending: { bg: "#EDE9FE", text: "#5B21B6" },
   active: { bg: "#D1FAE5", text: "#065F46" },
   completed: { bg: "#DBEAFE", text: "#1E40AF" },
   cancelled: { bg: "#FEE2E2", text: "#991B1B" },
   expired: { bg: "#FEF3C7", text: "#92400E" },
 };
 
-const STATUS_FILTERS = ["Tümü", "Aktif", "Tamamlandı", "İptal Edildi", "Süresi Doldu"];
+const STATUS_FILTERS = ["Tümü", "Onay Bekliyor", "Aktif", "Tamamlandı", "İptal Edildi", "Süresi Doldu"];
 const STATUS_MAP: Record<string, string> = {
-  "Aktif": "active", "Tamamlandı": "completed", "İptal Edildi": "cancelled", "Süresi Doldu": "expired",
+  "Onay Bekliyor": "pending", "Aktif": "active", "Tamamlandı": "completed", "İptal Edildi": "cancelled", "Süresi Doldu": "expired",
 };
 
 export default function AllReservationsPage() {
@@ -30,10 +32,8 @@ export default function AllReservationsPage() {
   const [toast, setToast] = useState("");
 
   useEffect(() => {
-    // Backend API çağrısı, api.ts üzerinden güvenli bir şekilde yapılıyor
     api.getAllReservations()
       .then((res: any) => {
-        // Gelen veriyi her ihtimale karşı zorla dizi yapıyoruz
         const dataList = Array.isArray(res) ? res : (res?.data || res?.reservations || []);
         setReservations(dataList || []);
       })
@@ -50,9 +50,8 @@ export default function AllReservationsPage() {
     setUpdating(id);
     try {
       await api.updateReservation(id, { status });
-      // Güncelleme başarılıysa listedeki durumu (state) değiştiriyoruz
       setReservations((rs) => (rs || []).map((r) => (r?.id === id ? { ...r, status } : r)));
-      showToast("Rezervasyon güncellendi");
+      showToast(status === "active" ? "Rezervasyon onaylandı" : status === "cancelled" ? "Rezervasyon reddedildi/iptal edildi" : "Rezervasyon güncellendi");
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "Güncelleme başarısız");
     } finally {
@@ -80,6 +79,7 @@ export default function AllReservationsPage() {
 
   const counts = {
     total: safeReservations.length,
+    pending: safeReservations.filter((r) => r?.status === "pending").length,
     active: safeReservations.filter((r) => r?.status === "active").length,
     completed: safeReservations.filter((r) => r?.status === "completed").length,
     cancelled: safeReservations.filter((r) => r?.status === "cancelled").length,
@@ -96,10 +96,10 @@ export default function AllReservationsPage() {
         </p>
       </div>
 
-      {/* Summary cards */}
-      <div className="px-8 pb-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="px-8 pb-5 grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
           { label: "Toplam", value: counts.total, bg: "#F8F7F3", text: "var(--foreground)" },
+          { label: "Onay Bekliyor", value: counts.pending, bg: "#EDE9FE", text: "#5B21B6" },
           { label: "Aktif", value: counts.active, bg: "#D1FAE5", text: "#065F46" },
           { label: "Tamamlandı", value: counts.completed, bg: "#DBEAFE", text: "#1E40AF" },
           { label: "İptal Edilen", value: counts.cancelled, bg: "#FEE2E2", text: "#991B1B" },
@@ -110,7 +110,7 @@ export default function AllReservationsPage() {
           </div>
         ))}
       </div>
-      {/* Filters */}
+
       <div className="px-8 pb-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted-foreground)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -160,7 +160,6 @@ export default function AllReservationsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {/* BAŞLIKLARA "İade Tarihi" EKLENDİ */}
                   {["#", "Kitap", "Kullanıcı", "Durum", "İşlem Tarihi", "İade Tarihi", ""].map((h) => (
                     <th key={h} className="px-5 py-3 text-left font-semibold text-xs uppercase tracking-wider" style={{ color: "var(--muted-foreground)" }}>
                       {h}
@@ -173,10 +172,9 @@ export default function AllReservationsPage() {
                   if (!r) return null;
                   const sc = STATUS_COLORS[r.status] ?? { bg: "#F3F4F6", text: "#6B7280" };
                   const fullName = `${r.first_name || ""} ${r.last_name || ""}`.trim() || `Kullanıcı #${r.user_id}`;
-                  
-                  // GECİKME KONTROLÜ: Tarih geçmiş mi VE kitap hala "Aktif" durumda mı?
                   const isOverdue = r.due_date && new Date(r.due_date) < new Date() && r.status === "active";
-                  
+                  const isPending = r.status === "pending";
+
                   return (
                     <tr
                       key={r.id || i}
@@ -205,18 +203,14 @@ export default function AllReservationsPage() {
                           {STATUS_LABELS[r.status] || "Bilinmiyor"}
                         </span>
                       </td>
-                      
-                      {/* İŞLEM TARİHİ */}
                       <td className="px-5 py-3" style={{ color: "var(--muted-foreground)" }}>
                         {r.reserved_at ? new Date(r.reserved_at).toLocaleDateString("tr-TR") : "—"}
                       </td>
-                      
-                      {/* İADE TARİHİ (Gecikmişse Kırmızı ve Kalın Yazı) */}
-                      <td 
-                        className="px-5 py-3" 
-                        style={{ 
-                          color: isOverdue ? "#DC2626" : "var(--muted-foreground)", // Kırmızı (#DC2626)
-                          fontWeight: isOverdue ? "bold" : "500" 
+                      <td
+                        className="px-5 py-3"
+                        style={{
+                          color: isOverdue ? "#DC2626" : "var(--muted-foreground)",
+                          fontWeight: isOverdue ? "bold" : "500"
                         }}
                       >
                         {r.due_date ? new Date(r.due_date).toLocaleDateString("tr-TR") : "—"}
@@ -228,18 +222,39 @@ export default function AllReservationsPage() {
                       </td>
 
                       <td className="px-5 py-3">
-                        <select
-                          value={r.status}
-                          disabled={updating === r.id}
-                          onChange={(e) => updateStatus(r.id, e.target.value as Reservation["status"])}
-                          className="px-2 py-1.5 rounded-lg text-xs font-semibold outline-none cursor-pointer"
-                          style={{ backgroundColor: "var(--muted)", border: "1.5px solid var(--border)", color: "var(--foreground)" }}
-                        >
-                          <option value="active">Aktif</option>
-                          <option value="completed">Tamamlandı</option>
-                          <option value="cancelled">İptal Edildi</option>
-                          <option value="expired">Süresi Doldu</option>
-                        </select>
+                        {isPending ? (
+                          <div className="flex gap-1.5">
+                            <button
+                              disabled={updating === r.id}
+                              onClick={() => updateStatus(r.id, "active")}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
+                              style={{ backgroundColor: "#D1FAE5", color: "#065F46" }}
+                            >
+                              Onayla
+                            </button>
+                            <button
+                              disabled={updating === r.id}
+                              onClick={() => updateStatus(r.id, "cancelled")}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
+                              style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}
+                            >
+                              Reddet
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            value={r.status}
+                            disabled={updating === r.id}
+                            onChange={(e) => updateStatus(r.id, e.target.value as Reservation["status"])}
+                            className="px-2 py-1.5 rounded-lg text-xs font-semibold outline-none cursor-pointer"
+                            style={{ backgroundColor: "var(--muted)", border: "1.5px solid var(--border)", color: "var(--foreground)" }}
+                          >
+                            <option value="active">Aktif</option>
+                            <option value="completed">Tamamlandı</option>
+                            <option value="cancelled">İptal Edildi</option>
+                            <option value="expired">Süresi Doldu</option>
+                          </select>
+                        )}
                       </td>
                     </tr>
                   );

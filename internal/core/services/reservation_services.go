@@ -35,7 +35,7 @@ func (s *ReservationServices) ReservationCreate(ctx context.Context, requesterID
 	newReservation := domain.Reservation{
 		UserID:  targetUserID,
 		BookID:  bookId,
-		Status:  domain.StatusActive,
+		Status:  domain.StatusPending,
 		DueDate: dueDate,
 	}
 	err := s.repo.ReservationCreate(ctx, &newReservation)
@@ -45,6 +45,8 @@ func (s *ReservationServices) ReservationCreate(ctx context.Context, requesterID
 			return nil, errors.New("kitap bulunamadi")
 		case errors.Is(err, repository.ErrBookNotAvailable):
 			return nil, errors.New("bu kitap su anda musait degil (zaten rezerve/odunc)")
+		case errors.Is(err, repository.ErrReservationLimitExceeded):
+			return nil, fmt.Errorf("en fazla %d acik rezervasyonunuz olabilir, once mevcutlardan birini iade/iptal edin", domain.MaxActiveReservationsPerUser)
 		default:
 			fmt.Println("REZERVASYON DB HATASI:", err)
 			return nil, errors.New("rezervasyon yapilamadi")

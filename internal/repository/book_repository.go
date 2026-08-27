@@ -3,18 +3,116 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"log"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
+	"github.com/redis/go-redis/v9"
 )
 
+const booksAllIDsKey = "books:allids"
+
 type BookRepository struct {
-	db *sql.DB
+	db    *sql.DB
+	redis *redis.Client
 }
 
-func NewBookRepository(db *sql.DB) *BookRepository {
-	return &BookRepository{db: db}
+func NewBookRepository(db *sql.DB, redisClient *redis.Client) *BookRepository {
+	return &BookRepository{db: db, redis: redisClient}
+}
+
+func bookCacheKey(id int64) string {
+	return fmt.Sprintf("book:%d", id)
+}
+
+func fetchBookFromDB(ctx context.Context, db *sql.DB, id int64) (*domain.Book, error) {
+	query := `SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
+			NOT EXISTS (
+				SELECT 1 FROM reservations res
+				WHERE res.book_id = b.id AND res.status IN ('active','pending')
+			) AS available
+			FROM books b
+			WHERE b.id=$1`
+
+	book := &domain.Book{}
+	err := db.QueryRowContext(ctx, query, id).Scan(
+		&book.ID, &book.ISBN, &book.Title, &book.Author, &book.Genre, &book.PublishDate, &book.Description, &book.Available,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return book, nil
+}
+
+func refreshBookCacheEntry(ctx context.Context, db *sql.DB, r *redis.Client, id int64) {
+	if r == nil {
+		return
+	}
+	book, err := fetchBookFromDB(ctx, db, id)
+	if err != nil {
+		return
+	}
+	data, err := json.Marshal(book)
+	if err != nil {
+		return
+	}
+	r.Set(ctx, bookCacheKey(id), data, 0)
+	r.SAdd(ctx, booksAllIDsKey, id)
+}
+
+func removeBookCacheEntry(ctx context.Context, r *redis.Client, id int64) {
+	if r == nil {
+		return
+	}
+	r.Del(ctx, bookCacheKey(id))
+	r.SRem(ctx, booksAllIDsKey, id)
+}
+
+func (r *BookRepository) WarmupCache(ctx context.Context) error {
+	if r.redis == nil {
+		return nil
+	}
+	query := `SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
+			NOT EXISTS (
+				SELECT 1 FROM reservations res
+				WHERE res.book_id = b.id AND res.status IN ('active','pending')
+			) AS available
+			FROM books b
+			ORDER BY b.id`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	pipe := r.redis.Pipeline()
+	count := 0
+	for rows.Next() {
+		b := &domain.Book{}
+		if err := rows.Scan(&b.ID, &b.ISBN, &b.Title, &b.Author, &b.Genre, &b.PublishDate, &b.Description, &b.Available); err != nil {
+			return err
+		}
+		data, err := json.Marshal(b)
+		if err != nil {
+			continue
+		}
+		pipe.Set(ctx, bookCacheKey(int64(b.ID)), data, 0)
+		pipe.SAdd(ctx, booksAllIDsKey, b.ID)
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return err
+	}
+	log.Printf("Redis warmup: %d kitap cache'e yuklendi", count)
+	return nil
 }
 
 func (r *BookRepository) BookCreate(ctx context.Context, book *domain.Book) error {
@@ -25,25 +123,25 @@ func (r *BookRepository) BookCreate(ctx context.Context, book *domain.Book) erro
 		return err
 	}
 	book.Available = true
+	refreshBookCacheEntry(ctx, r.db, r.redis, int64(book.ID))
 	return nil
 }
 
 func (r *BookRepository) BookGetByID(ctx context.Context, id int64) (*domain.Book, error) {
-	query := `SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
-			NOT EXISTS (
-				SELECT 1 FROM reservations res
-				WHERE res.book_id = b.id AND res.status='active'
-			) AS available
-			FROM books b
-			WHERE b.id=$1`
+	if r.redis != nil {
+		if cached, err := r.redis.Get(ctx, bookCacheKey(id)).Result(); err == nil {
+			var book domain.Book
+			if jsonErr := json.Unmarshal([]byte(cached), &book); jsonErr == nil {
+				return &book, nil
+			}
+		}
+	}
 
-	book := &domain.Book{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&book.ID, &book.ISBN, &book.Title, &book.Author, &book.Genre, &book.PublishDate, &book.Description, &book.Available,
-	)
+	book, err := fetchBookFromDB(ctx, r.db, id)
 	if err != nil {
 		return nil, err
 	}
+	refreshBookCacheEntry(ctx, r.db, r.redis, id)
 	return book, nil
 }
 
@@ -62,6 +160,7 @@ func (r *BookRepository) BookDelete(ctx context.Context, id int64) error {
 	if rowsAffected == 0 {
 		return sql.ErrNoRows
 	}
+	removeBookCacheEntry(ctx, r.redis, id)
 	return nil
 }
 
@@ -81,15 +180,23 @@ func (r *BookRepository) BookUpdate(ctx context.Context, book *domain.Book) erro
 	if rowAffected == 0 {
 		return sql.ErrNoRows
 	}
+	refreshBookCacheEntry(ctx, r.db, r.redis, int64(book.ID))
 	return nil
 
 }
 
 func (r *BookRepository) BookList(ctx context.Context, limit, offset int) ([]*domain.Book, error) {
+	if r.redis != nil {
+		if books, ok := r.bookListFromCache(ctx, limit, offset); ok {
+			return books, nil
+		}
+	}
+
+	// Cache soğuksa (örn. warmup henüz bitmediyse) DB'den çek ve cache'i doldur.
 	query := `SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
 			NOT EXISTS (
 				SELECT 1 FROM reservations res
-				WHERE res.book_id = b.id AND res.status='active'
+				WHERE res.book_id = b.id AND res.status IN ('active','pending')
 			) AS available
 			FROM books b
 			ORDER BY b.id
@@ -108,12 +215,69 @@ func (r *BookRepository) BookList(ctx context.Context, limit, offset int) ([]*do
 			return nil, err
 		}
 		books = append(books, b)
-
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
+	if r.redis != nil {
+		for _, b := range books {
+			refreshBookCacheEntry(ctx, r.db, r.redis, int64(b.ID))
+		}
+	}
 	return books, nil
+}
+
+func (r *BookRepository) bookListFromCache(ctx context.Context, limit, offset int) ([]*domain.Book, bool) {
+	idStrs, err := r.redis.SMembers(ctx, booksAllIDsKey).Result()
+	if err != nil || len(idStrs) == 0 {
+		return nil, false
+	}
+
+	ids := make([]int, 0, len(idStrs))
+	for _, s := range idStrs {
+		if n, convErr := strconv.Atoi(s); convErr == nil {
+			ids = append(ids, n)
+		}
+	}
+	sort.Ints(ids)
+
+	start := offset
+	if start > len(ids) {
+		start = len(ids)
+	}
+	end := start + limit
+	if end > len(ids) {
+		end = len(ids)
+	}
+	pageIDs := ids[start:end]
+	if len(pageIDs) == 0 {
+		return []*domain.Book{}, true
+	}
+
+	keys := make([]string, len(pageIDs))
+	for i, id := range pageIDs {
+		keys[i] = bookCacheKey(int64(id))
+	}
+
+	vals, err := r.redis.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, false
+	}
+
+	books := make([]*domain.Book, 0, len(vals))
+	for _, v := range vals {
+		s, isStr := v.(string)
+		if !isStr {
+			return nil, false
+		}
+		b := &domain.Book{}
+		if jsonErr := json.Unmarshal([]byte(s), b); jsonErr != nil {
+			return nil, false
+		}
+		books = append(books, b)
+	}
+	return books, true
 }
 
 func (r *BookRepository) BookSearch(ctx context.Context, limit int, keywords []string) ([]*domain.Book, error) {
@@ -133,7 +297,7 @@ func (r *BookRepository) BookSearch(ctx context.Context, limit int, keywords []s
 	query := fmt.Sprintf(`SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
 			NOT EXISTS (
 				SELECT 1 FROM reservations res
-				WHERE res.book_id = b.id AND res.status='active'
+				WHERE res.book_id = b.id AND res.status IN ('active','pending')
 			) AS available
 			FROM books b
 			WHERE %s
