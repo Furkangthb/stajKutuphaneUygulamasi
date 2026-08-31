@@ -107,3 +107,11 @@ func (s *ReservationServices) ReservationGetByUserID(ctx context.Context, id int
 	}
 	return reservations, nil
 }
+
+func (s *ReservationServices) ExpireOverdueReservations(ctx context.Context) (int, error) {
+	bookIDs, err := s.repo.ExpireOverdue(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return len(bookIDs), nil
+}

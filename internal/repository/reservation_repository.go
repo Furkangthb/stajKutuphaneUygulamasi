@@ -46,7 +46,7 @@ func (r *ReservationRepository) ReservationCreate(ctx context.Context, reservati
 
 	var openCount int
 	err = tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM reservations WHERE user_id=$1 AND status IN ('pending','active')`,
+		`SELECT COUNT(*) FROM reservations WHERE user_id=$1 AND status IN ('pending','active','expired')`,
 		reservation.UserID,
 	).Scan(&openCount)
 	if err != nil {
@@ -58,7 +58,7 @@ func (r *ReservationRepository) ReservationCreate(ctx context.Context, reservati
 
 	var alreadyReserved bool
 	err = tx.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM reservations WHERE book_id=$1 AND status IN ('pending','active'))`,
+		`SELECT EXISTS(SELECT 1 FROM reservations WHERE book_id=$1 AND status IN ('pending','active','expired'))`,
 		reservation.BookID,
 	).Scan(&alreadyReserved)
 	if err != nil {
@@ -193,4 +193,32 @@ func (r *ReservationRepository) ReservationGetUserByID(ctx context.Context, user
 		reservations = append(reservations, reserve)
 	}
 	return reservations, nil
+}
+
+func (r *ReservationRepository) ExpireOverdue(ctx context.Context) ([]int, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`UPDATE reservations SET status='expired'
+		 WHERE status='active' AND due_date < NOW()
+		 RETURNING book_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var bookIDs []int
+	for rows.Next() {
+		var bookID int
+		if err := rows.Scan(&bookID); err != nil {
+			return nil, err
+		}
+		bookIDs = append(bookIDs, bookID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for _, id := range bookIDs {
+		r.refreshBookCache(ctx, id)
+	}
+	return bookIDs, nil
 }

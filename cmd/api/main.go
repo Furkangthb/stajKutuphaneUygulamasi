@@ -66,7 +66,9 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	r.POST("/api/chat", middleware.RequireAuth(authService), chatHandlers.Chat)
+	r.GET("/api/chat/history", middleware.RequireAuth(authService), chatHandlers.ChatHistory)
 
 	r.POST("/api/users/register", userHandlers.UserRegister)
 	r.POST("/api/auth/login", authHandler.Login)
@@ -88,6 +90,20 @@ func main() {
 	r.PUT("/api/reservation/:id", middleware.RequireAuth(authService), reservationHandlers.ReservationUpdate)
 	r.GET("/api/reservation/:id", middleware.RequireAuth(authService), reservationHandlers.ReservationGetUserByID)
 	r.GET("/api/reservations", middleware.RequireAuth(authService), middleware.RequireRole("admin"), reservationHandlers.ReservationListAll)
+
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			count, err := reservationService.ExpireOverdueReservations(context.Background())
+			if err != nil {
+				log.Printf("Sureli rezervasyon kontrolu basarisiz: %v", err)
+			} else if count > 0 {
+				log.Printf("%d rezervasyon suresi doldugu icin expired yapildi", count)
+			}
+			<-ticker.C
+		}
+	}()
 
 	r.Run(":8080")
 }

@@ -33,7 +33,7 @@ func fetchBookFromDB(ctx context.Context, db *sql.DB, id int64) (*domain.Book, e
 	query := `SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
 			NOT EXISTS (
 				SELECT 1 FROM reservations res
-				WHERE res.book_id = b.id AND res.status IN ('active','pending')
+				WHERE res.book_id = b.id AND res.status IN ('active','pending','expired')
 			) AS available
 			FROM books b
 			WHERE b.id=$1`
