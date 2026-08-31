@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/database"
+	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/logger"
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/middleware"
 
 	_ "github.com/Furkangthb/stajKutuphaneUygulamasi/docs"
@@ -28,6 +29,10 @@ import (
 // @in header
 // @name Authorization
 func main() {
+
+	log := logger.New()
+	slog.SetDefault(log)
+
 	database.VeriTabaniBaglanma()
 	database.RedisConnect()
 
@@ -40,7 +45,7 @@ func main() {
 	bookHandlers := handlers.NewBookHandlers(bookService)
 
 	if err := bookRepo.WarmupCache(context.Background()); err != nil {
-		log.Printf("Redis warmup basarisiz (uygulama yine de calisacak): %v", err)
+		slog.Warn("redise yuklenemedi")
 	}
 
 	reservationRepo := repository.NewResservationRepository(database.DB, database.RedisClient)
@@ -97,9 +102,9 @@ func main() {
 		for {
 			count, err := reservationService.ExpireOverdueReservations(context.Background())
 			if err != nil {
-				log.Printf("Sureli rezervasyon kontrolu basarisiz: %v", err)
+				slog.Warn("Sureli rezervasyon kontrolu basarisiz", slog.Any("error", err))
 			} else if count > 0 {
-				log.Printf("%d rezervasyon suresi doldugu icin expired yapildi", count)
+				slog.Warn(" rezervasyon suresi doldugu icin expired yapildi")
 			}
 			<-ticker.C
 		}

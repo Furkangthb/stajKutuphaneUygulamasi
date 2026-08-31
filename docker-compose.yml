@@ -67,6 +67,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - APP_ENV=${APP_ENV:-development}
     networks:
       stajKutuphaneNetwork:
         ipv4_address: 172.20.0.4
@@ -105,21 +106,7 @@ services:
         stajKutuphaneNetwork:
           ipv4_address: 172.20.0.6
 
-  minio:
-      image: minio/minio
-      container_name: kutuphane_minio
-      ports:
-        - "9000:9000"  
-        - "9001:9001"  
-      volumes:
-        - minio-data:/data
-      environment:
-        - MINIO_ROOT_USER=${MINIO_ROOT_USER} 
-        - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
-      command: server /data --console-address ":9001"
-      networks:
-        stajKutuphaneNetwork:
-          ipv4_address: 172.20.0.7
+ 
   
 volumes:
   redis-data:

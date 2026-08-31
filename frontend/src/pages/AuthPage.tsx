@@ -8,7 +8,6 @@ interface AuthPageProps {
 export default function AuthPage({ onLogin }: AuthPageProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
   
-  // username alanını form state'inden kaldırdık
   const [form, setForm] = useState({ 
     email: "", password: "", first_name: "", last_name: "", phone: "" 
   });
@@ -52,7 +51,6 @@ export default function AuthPage({ onLogin }: AuthPageProps) {
         onLogin(loggedInUser as import("../api").User, tokenString);
         
       } else {
-        // register metodundan username'i kaldırdık
         await api.register({ 
           email: form.email, 
           password: form.password,
@@ -62,7 +60,6 @@ export default function AuthPage({ onLogin }: AuthPageProps) {
         });
         setSuccess("Kayıt başarılı! Şimdi giriş yapabilirsiniz.");
         setMode("login");
-        // Form sıfırlama işleminden username'i kaldırdık
         setForm({ email: "", password: "", first_name: "", last_name: "", phone: "" });
       }
     } catch (err: unknown) {

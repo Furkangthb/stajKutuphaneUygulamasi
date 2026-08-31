@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -36,6 +37,7 @@ type ReservationCreatRequest struct {
 func (h *ReservationHandlers) ReservationCreate(c *gin.Context) {
 	var reserve ReservationCreatRequest
 	if err := c.ShouldBindJSON(&reserve); err != nil {
+		slog.Warn("rezervasyon parse edilemedi", slog.Any("error", err))
 		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
@@ -46,9 +48,11 @@ func (h *ReservationHandlers) ReservationCreate(c *gin.Context) {
 	ctx := c.Request.Context()
 	reservation, err := h.reserService.ReservationCreate(ctx, tokenUserID, tokenRole, reserve.UserID, reserve.BookID)
 	if err != nil {
+		slog.Warn("rezervasyon olusturulamadi", slog.Any("error", err), slog.Int("tokenUserID", tokenUserID), slog.String("tokenRole", tokenRole), slog.Int("bookID", reserve.BookID))
 		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
+	slog.Info("Rezervasyon basarıyla olusturuldu", slog.Int("tokenUserID", tokenUserID), slog.String("tokenRole", tokenRole), slog.Int("bookID", reservation.BookID))
 	c.JSON(201, reservation)
 }
 
@@ -71,12 +75,14 @@ type ReservationUpdateRequest struct {
 func (h *ReservationHandlers) ReservationUpdate(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		slog.Warn("rezervasyon donusumu yapilamadi", slog.String("id_param", c.Param("id")))
 		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
 
 	var rework ReservationUpdateRequest
 	if err := c.ShouldBindJSON(&rework); err != nil {
+		slog.Warn("rezervasyon parse edilemedi", slog.Any("error", err))
 		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
@@ -88,15 +94,18 @@ func (h *ReservationHandlers) ReservationUpdate(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrReservationNotFound):
+			slog.Warn("rezervasyon bulunamadi", slog.Any("error", err))
 			c.JSON(http.StatusNotFound, gin.H{"Hata": err.Error()})
 		case errors.Is(err, services.ErrForbidden):
+			slog.Warn("rezervason icin yetkiniz yok", slog.Any("error", err))
 			c.JSON(http.StatusForbidden, gin.H{"Hata": err.Error()})
 		default:
-			// ErrInvalidStatus, ErrInvalidTransition ve diğer beklenmeyen hatalar 400 doner
-			c.JSON(http.StatusBadRequest, gin.H{"Hata": err.Error()})
+			slog.Error("rezervasyon db hatasi", slog.Any("error", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"Hata": err.Error()})
 		}
 		return
 	}
+	slog.Info("Rezervasyon basarıyla guncellendi", slog.Int64("id", id), slog.String("yeniDurum", rework.Status), slog.Int("tokenUserID", tokenUserID), slog.String("tokenRole", tokenRole))
 	c.JSON(200, reserve)
 }
 
@@ -108,14 +117,16 @@ func (h *ReservationHandlers) ReservationUpdate(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Router /api/reservations [get]
 func (h *ReservationHandlers) ReservationListAll(c *gin.Context) {
 	reservations, err := h.reserService.ReservationListAll(c.Request.Context())
 	if err != nil {
-		c.JSON(400, gin.H{"Hata": err.Error()})
+		slog.Error("rezervasyonlar getirelemedi", slog.Any("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"Hata": err.Error()})
 		return
 	}
+	slog.Info("rezervasyonlar basarıyla getirildi")
 	c.JSON(200, reservations)
 }
 
@@ -133,6 +144,7 @@ func (h *ReservationHandlers) ReservationListAll(c *gin.Context) {
 func (h *ReservationHandlers) ReservationGetUserByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		slog.Warn("rezervasyon id donusturelemedi", slog.Any("error", err), slog.String("id_param", c.Param("id")))
 		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
@@ -141,14 +153,17 @@ func (h *ReservationHandlers) ReservationGetUserByID(c *gin.Context) {
 	tokenRole := c.GetString("role")
 
 	if tokenRole != "admin" && int64(tokenUserID) != id {
+		slog.Warn("Sadece kendi rezervasyonunu goruntuleyebilirsin", slog.Int("tokenUserID", tokenUserID), slog.String("tokenRole", tokenRole), slog.Int("id", int(id)))
 		c.JSON(http.StatusForbidden, gin.H{"Hata": "sadece kendi rezervasyonlarinizi goruntuleyebilirsiniz"})
 		return
 	}
 
 	reserve, err := h.reserService.ReservationGetByUserID(c.Request.Context(), int(id))
 	if err != nil {
+		slog.Warn("rezervasyonlar getirelemedi", slog.Any("error", err))
 		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
+	slog.Info("rezervasyonlar basariyla getirildi", slog.Int("tokenUserID", tokenUserID), slog.String("tokenRole", tokenRole))
 	c.JSON(200, reserve)
 }

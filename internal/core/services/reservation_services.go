@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
@@ -48,7 +49,8 @@ func (s *ReservationServices) ReservationCreate(ctx context.Context, requesterID
 		case errors.Is(err, repository.ErrReservationLimitExceeded):
 			return nil, fmt.Errorf("en fazla %d acik rezervasyonunuz olabilir, once mevcutlardan birini iade/iptal edin", domain.MaxActiveReservationsPerUser)
 		default:
-			fmt.Println("REZERVASYON DB HATASI:", err)
+			slog.Error("Reservasyon db hatasi", slog.Any("error", err))
+
 			return nil, errors.New("rezervasyon yapilamadi")
 		}
 	}

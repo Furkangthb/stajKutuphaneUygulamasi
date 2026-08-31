@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -42,6 +43,7 @@ type BookAdd struct {
 func (h *BookHandlers) BookAdd(c *gin.Context) {
 	var kitapEkle BookAdd
 	if err := c.ShouldBindJSON(&kitapEkle); err != nil {
+		slog.Warn("kitap ekleme parse edilemedi", slog.String("kitapISBN", kitapEkle.ISBN))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -50,11 +52,13 @@ func (h *BookHandlers) BookAdd(c *gin.Context) {
 	ctx := c.Request.Context()
 	book, err := h.bookService.BookAdd(ctx, kitapEkle.ISBN, kitapEkle.Title, kitapEkle.Author, kitapEkle.Genre, kitapEkle.PublishDate, kitapEkle.Description)
 	if err != nil {
+		slog.Warn("Kitap ekleme basarısız", slog.String("kitapISBN", kitapEkle.ISBN))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("Kitap basarili bir sekilde eklendi", slog.String("kitapISBN", kitapEkle.ISBN))
 	c.JSON(201, book)
 }
 
@@ -71,6 +75,7 @@ func (h *BookHandlers) BookAdd(c *gin.Context) {
 func (h *BookHandlers) BookGet(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		slog.Warn(" id donusumu yapilamadi", slog.String("id_param", c.Param("id")))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -78,11 +83,13 @@ func (h *BookHandlers) BookGet(c *gin.Context) {
 	}
 	book, err := h.bookService.BookGet(c.Request.Context(), id)
 	if err != nil {
+		slog.Warn("Kitap getirelemedi", slog.Int("kitapID", int(id)))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("kitap getirme basarili", slog.Int("kitapID", book.ID))
 	c.JSON(http.StatusOK, book)
 }
 
@@ -100,6 +107,7 @@ func (h *BookHandlers) BookGet(c *gin.Context) {
 func (h *BookHandlers) BookDelete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		slog.Warn("id donusumu yapilamadi", slog.String("id_param", c.Param("id")))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -107,11 +115,13 @@ func (h *BookHandlers) BookDelete(c *gin.Context) {
 	}
 	err = h.bookService.BookDelete(c.Request.Context(), id)
 	if err != nil {
+		slog.Warn("Kitap silinemedi", slog.Int("kitapID", int(id)))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("Kitap basarili bir sekilde silindi", slog.String("kitapID", c.Param("id")))
 	c.Status(http.StatusNoContent)
 }
 
@@ -139,6 +149,7 @@ type BookRework struct {
 func (h *BookHandlers) BookUpdate(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		slog.Warn("id donusumu yapilamadi", slog.String("id_param", c.Param("id")))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -146,6 +157,7 @@ func (h *BookHandlers) BookUpdate(c *gin.Context) {
 	}
 	var rework BookRework
 	if err := c.ShouldBindJSON(&rework); err != nil {
+		slog.Warn("update isteği parse edilemedi")
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -154,11 +166,13 @@ func (h *BookHandlers) BookUpdate(c *gin.Context) {
 	ctx := c.Request.Context()
 	book, err := h.bookService.BookUpdate(ctx, id, rework.ISBN, rework.Title, rework.Author, rework.Genre, rework.PublishDate, rework.Description)
 	if err != nil {
+		slog.Warn("Kitap guncellemedi", slog.String("kitapISBN", rework.ISBN))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("Kitap basarılı bir sekilde guncellendi", slog.String("BookISBN", book.ISBN))
 	c.JSON(http.StatusOK, book)
 }
 
@@ -179,17 +193,20 @@ func (h *BookHandlers) BookList(c *gin.Context) {
 	page_size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	books, err := h.bookService.BookList(c.Request.Context(), page, page_size)
 	if err != nil {
+		slog.Warn("Kitaplar listelenemedi")
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("Kitaplar basarılı bir sekilde listelendi")
 	c.JSON(http.StatusOK, books)
 }
 
 func (h *BookHandlers) BookSearch(c *gin.Context) {
 	q := c.Query("q")
 	if q == "" {
+		slog.Info("bos arama sorgusu")
 		c.JSON(200, []*domain.Book{})
 		return
 	}
@@ -198,9 +215,10 @@ func (h *BookHandlers) BookSearch(c *gin.Context) {
 
 	books, err := h.bookService.BookSearch(c.Request.Context(), keywords, 50)
 	if err != nil {
+		slog.Warn("kitap aranamadi")
 		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
-
+	slog.Info("Kitap basarili bir şekilde arandi")
 	c.JSON(200, books)
 }

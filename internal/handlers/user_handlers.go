@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -27,6 +28,7 @@ type RegisterRequest struct {
 func (h *UserHandlers) UserRegister(c *gin.Context) {
 	var istek RegisterRequest
 	if err := c.ShouldBindJSON(&istek); err != nil {
+		slog.Warn("kullanici bilgileri parse edilemedi", slog.Any("error", err))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -35,11 +37,13 @@ func (h *UserHandlers) UserRegister(c *gin.Context) {
 	ctx := c.Request.Context()
 	user, err := h.userService.UserRegister(ctx, istek.FirstName, istek.LastName, istek.Phone, istek.Email, istek.Password)
 	if err != nil {
+		slog.Warn("kullanici kayit olma basarisiz", slog.Any("error", err), slog.String("istekEmail", istek.Email))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("Kullanici basariyla kayit oldu", slog.String("istekEmail", istek.Email))
 	c.JSON(201, user)
 }
 
@@ -51,6 +55,7 @@ type LoginRequest struct {
 func (h *UserHandlers) UserLogin(c *gin.Context) {
 	var istek LoginRequest
 	if err := c.ShouldBindJSON(&istek); err != nil {
+		slog.Warn("kullanici giris bilgileri parse edilemedi", slog.Any("error", err), slog.String("istekEmail", istek.Email))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -59,11 +64,13 @@ func (h *UserHandlers) UserLogin(c *gin.Context) {
 	ctx := c.Request.Context()
 	user, err := h.userService.UserLogin(ctx, istek.Email, istek.Password)
 	if err != nil {
+		slog.Warn("kullanici giris yapilamadi", slog.Any("error", err), slog.String("istekEmail", istek.Email))
 		c.JSON(401, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("kullanici basariyla giris yapti", slog.String("istekEmail", istek.Email))
 	c.JSON(200, user)
 }
 
@@ -81,6 +88,7 @@ func (h *UserHandlers) UserLogin(c *gin.Context) {
 func (h *UserHandlers) UserDelete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		slog.Warn("kullanici id parse edilemedi", slog.Any("error", err))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -88,11 +96,13 @@ func (h *UserHandlers) UserDelete(c *gin.Context) {
 	}
 	err = h.userService.UserDelete(c.Request.Context(), id)
 	if err != nil {
+		slog.Warn("kullanici silinemedi", slog.Any("error", err), slog.String("id_param", c.Param("id")))
 		c.JSON(404, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("kullanici basariyla silindi", slog.String("id_param", c.Param("id")))
 	c.Status(http.StatusNoContent)
 }
 
@@ -110,6 +120,7 @@ func (h *UserHandlers) UserDelete(c *gin.Context) {
 func (h *UserHandlers) UserGet(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		slog.Warn("kullanici bilgileri parse edilemedi", slog.Any("error", err))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -117,11 +128,13 @@ func (h *UserHandlers) UserGet(c *gin.Context) {
 	}
 	user, err := h.userService.UserGet(c.Request.Context(), id)
 	if err != nil {
+		slog.Warn("kullanici bilgileri getirelemedi", slog.Any("error", err), slog.String("id_param", c.Param("id")))
 		c.JSON(404, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("kullanici basariyla getirildi", slog.String("id_param", c.Param("id")))
 	c.JSON(http.StatusOK, user)
 }
 
@@ -147,6 +160,7 @@ type UserRework struct {
 func (h *UserHandlers) UserUpdate(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		slog.Warn("kullanici bilgileri parse edilemedi", slog.Any("error", err))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -156,11 +170,13 @@ func (h *UserHandlers) UserUpdate(c *gin.Context) {
 	tokenRole := c.GetString("role")
 
 	if tokenRole != "admin" && int64(tokenUserID) != id {
+		slog.Warn("bilgileri guncellemek icin yetkiniz yok ", slog.Any("error", err), slog.Int("tokenUserID", tokenUserID), slog.String("tokenRole", tokenRole))
 		c.JSON(http.StatusForbidden, gin.H{"Hata": "sadece kendi bilgilerinizi guncelleyebilirsiniz"})
 		return
 	}
 	var rework UserRework
 	if err := c.ShouldBindJSON(&rework); err != nil {
+		slog.Warn("kullanici bilgileri parse edilemedi", slog.Any("error", err))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
@@ -171,6 +187,7 @@ func (h *UserHandlers) UserUpdate(c *gin.Context) {
 	if tokenRole != "admin" {
 		currentUser, err := h.userService.UserGet(ctx, id)
 		if err != nil {
+			slog.Warn("kullanici bulunamadi ", slog.Any("error", err), slog.Int("tokenUserID", tokenUserID), slog.String("tokenRole", tokenRole), slog.Int("id", int(id)))
 			c.JSON(404, gin.H{
 				"Hata": "kullanici bulunamadi",
 			})
@@ -180,11 +197,13 @@ func (h *UserHandlers) UserUpdate(c *gin.Context) {
 	}
 	user, err := h.userService.UserUpdate(ctx, int(id), rework.FirstName, rework.LastName, rework.Email, newRole)
 	if err != nil {
+		slog.Warn("kullanci guncellenemedi ", slog.Any("error", err), slog.String("reworkEmail", rework.Email))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("kullanici basarıyla guncellendi", slog.String("reworkEmail", rework.Email))
 	c.JSON(http.StatusOK, user)
 }
 
@@ -206,11 +225,13 @@ func (h *UserHandlers) UserList(c *gin.Context) {
 
 	users, err := h.userService.UserList(c.Request.Context(), page, page_size)
 	if err != nil {
+		slog.Warn("kullanicilar getirelemedi", slog.Any("error", err))
 		c.JSON(400, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("kullanicilar basariyla getirildi")
 	c.JSON(200, gin.H{
 		"data": users,
 		"page": page,
@@ -225,22 +246,27 @@ type ChangePasswordRequest struct {
 func (h *UserHandlers) UserChangePassword(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		slog.Warn("password id donusturelemedi", slog.Any("error", err), slog.String("id_param", c.Param("id")))
 		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
 	tokenUserID := c.GetInt("user_id")
 	if int64(tokenUserID) != id {
+		slog.Warn("sadece kendi sifrenizi degistebilirsiniz", slog.Any("error", err), slog.Int("tokenUserID", tokenUserID), slog.Int("id", int(id)))
 		c.JSON(http.StatusForbidden, gin.H{"Hata": "sadece kendi sifrenizi degistirebilirsiniz"})
 		return
 	}
 	var istek ChangePasswordRequest
 	if err := c.ShouldBindJSON(&istek); err != nil {
+		slog.Warn("password parse edilemedi", slog.Any("error", err))
 		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
 	if err := h.userService.UserChangePassword(c.Request.Context(), id, istek.CurrentPassword, istek.NewPassword); err != nil {
+		slog.Warn("password degistirelemedi", slog.Any("error", err), slog.Int("id", int(id)))
 		c.JSON(400, gin.H{"Hata": err.Error()})
 		return
 	}
+	slog.Info("sifre basariyla degistirildi", slog.Int("id", int(id)))
 	c.JSON(http.StatusOK, gin.H{"mesaj": "sifre basariyla guncellendi"})
 }

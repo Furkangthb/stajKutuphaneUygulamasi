@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -111,7 +111,7 @@ func (r *BookRepository) WarmupCache(ctx context.Context) error {
 	if _, err := pipe.Exec(ctx); err != nil {
 		return err
 	}
-	log.Printf("Redis warmup: %d kitap cache'e yuklendi", count)
+	slog.Info("Redis warmup kitap cache'e yuklendi")
 	return nil
 }
 
@@ -192,7 +192,6 @@ func (r *BookRepository) BookList(ctx context.Context, limit, offset int) ([]*do
 		}
 	}
 
-	// Cache soğuksa (örn. warmup henüz bitmediyse) DB'den çek ve cache'i doldur.
 	query := `SELECT b.id, b.isbn, b.title, b.author, b.genre, b.publish_date, b.description,
 			NOT EXISTS (
 				SELECT 1 FROM reservations res

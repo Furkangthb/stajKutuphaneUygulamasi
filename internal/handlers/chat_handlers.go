@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -38,6 +38,7 @@ func (h *ChatHandlers) Chat(c *gin.Context) {
 	var istek ChatRequist
 
 	if err := c.ShouldBindJSON(&istek); err != nil {
+		slog.Warn("chat islemi parse edilemedi", slog.Any("eroro", err))
 		c.JSON(http.StatusBadRequest, gin.H{"Hata": err.Error()})
 		return
 	}
@@ -46,10 +47,11 @@ func (h *ChatHandlers) Chat(c *gin.Context) {
 
 	cevap, err := h.chatServices.Sohbet(c.Request.Context(), userID, istek.Message)
 	if err != nil {
-		log.Printf("Gemini Sohbet Hatası: %v", err)
+		slog.Warn("Sohbet gerceklesemedi", slog.Int("userID", userID), slog.Any("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"Hata": err.Error()})
 		return
 	}
+	slog.Info("Sohbet basariyla gerceklesti", slog.Int("userID", userID))
 	c.JSON(http.StatusOK, gin.H{"Cevap": cevap})
 }
 
@@ -59,8 +61,10 @@ func (h *ChatHandlers) ChatHistory(c *gin.Context) {
 
 	gecmis, err := h.chatServices.GetHistory(c.Request.Context(), userID, limit)
 	if err != nil {
+		slog.Warn("gecmis yuklenemedi", slog.Int("userID", userID), slog.Any("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"Hata": err.Error()})
 		return
 	}
+	slog.Info("gecmis basarıyla yuklendi", slog.Int("userID", userID))
 	c.JSON(http.StatusOK, gin.H{"data": gecmis})
 }

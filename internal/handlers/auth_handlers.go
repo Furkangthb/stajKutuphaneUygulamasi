@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -36,6 +37,9 @@ func (h *AuthHandlers) Login(c *gin.Context) {
 	var istek loginRequest
 
 	if err := c.ShouldBindJSON(&istek); err != nil {
+
+		slog.Warn("login istegi parse edilemedi", slog.Any("error", err))
+
 		c.JSON(http.StatusBadRequest, gin.H{
 			"Hata": err.Error(),
 		})
@@ -43,11 +47,13 @@ func (h *AuthHandlers) Login(c *gin.Context) {
 	}
 	token, err := h.authService.Login(c.Request.Context(), istek.Email, istek.Password)
 	if err != nil {
+		slog.Warn("giris basarisiz", slog.String("email", istek.Email))
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("giris basarılı", slog.String("email", istek.Email))
 	c.JSON(http.StatusOK, gin.H{
 		"Token": token,
 	})
@@ -67,6 +73,7 @@ func (h *AuthHandlers) Login(c *gin.Context) {
 func (h *AuthHandlers) Logout(c *gin.Context) {
 	autHeader := c.GetHeader("Authorization")
 	if autHeader == "" {
+		slog.Warn("token bulunamadı")
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"Hata": "token bulunamadı",
 		})
@@ -74,6 +81,7 @@ func (h *AuthHandlers) Logout(c *gin.Context) {
 	}
 	parts := strings.SplitN(autHeader, " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		slog.Warn("gecersiz authorization header")
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"Hata": "gecersiz authorization header",
 		})
@@ -81,11 +89,13 @@ func (h *AuthHandlers) Logout(c *gin.Context) {
 	}
 	token := parts[1]
 	if err := h.authService.Logout(c.Request.Context(), token); err != nil {
+		slog.Warn("cıkıs yapilamadi")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"Hata": err.Error(),
 		})
 		return
 	}
+	slog.Info("cikis basarali")
 	c.JSON(http.StatusOK, gin.H{
 		"Mesaj": "Cıkıs basarali",
 	})
