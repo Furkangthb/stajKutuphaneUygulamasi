@@ -7,14 +7,13 @@ import (
 	"time"
 
 	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
-	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/repository"
 )
 
 type BookServices struct {
-	repo *repository.BookRepository
+	repo domain.BookRepository
 }
 
-func NewBookServices(repo *repository.BookRepository) *BookServices {
+func NewBookServices(repo domain.BookRepository) *BookServices {
 	return &BookServices{repo: repo}
 }
 

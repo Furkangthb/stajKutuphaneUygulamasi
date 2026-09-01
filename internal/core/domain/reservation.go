@@ -37,11 +37,13 @@ type ReservationFull struct {
 	BookTitle  string    `db:"book_title" json:"book_title"`
 	BookAuthor string    `db:"book_author" json:"book_author"`
 }
-
 type ReservationRepository interface {
-	Create(ctx context.Context, r *Reservation) error
-	Update(ctx context.Context, id int, status string) error
-	GetByUserID(ctx context.Context, userId int) ([]*ReservationWithUser, error)
+	ReservationCreate(ctx context.Context, r *Reservation) error
+	ReservationUpdate(ctx context.Context, r *Reservation) error
+	ReservationGetByID(ctx context.Context, id int) (*Reservation, error)
+	ReservationGetAll(ctx context.Context) ([]*ReservationFull, error)
+	ReservationGetUserByID(ctx context.Context, userID int) ([]*ReservationFull, error)
+	ExpireOverdue(ctx context.Context) ([]int, error)
 }
 
 const (

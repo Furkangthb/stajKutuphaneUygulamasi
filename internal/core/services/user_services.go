@@ -80,7 +80,7 @@ func (s *UserServices) UserUpdate(ctx context.Context, id int, first_name string
 }
 
 func (s *UserServices) UserList(ctx context.Context, page int, page_size int) ([]*domain.User, error) {
-	if page < 0 {
+	if page <= 0 {
 		page = 1
 	}
 	if page_size < 1 || page_size > 100 {

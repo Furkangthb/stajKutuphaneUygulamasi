@@ -10,17 +10,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/repository"
+	"github.com/Furkangthb/stajKutuphaneUygulamasi/internal/core/domain"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthServices struct {
-	authRepo  *repository.AuthRepository
-	userRepo  *repository.UserRepository
+	authRepo  domain.AuthRepository
+	userRepo  domain.UserRepository
 	secretKey []byte
 }
 
-func NewAuthServices(authRepo *repository.AuthRepository, userRepo *repository.UserRepository, secret string) *AuthServices {
+func NewAuthServices(authRepo domain.AuthRepository, userRepo domain.UserRepository, secret string) *AuthServices {
 	return &AuthServices{authRepo: authRepo, userRepo: userRepo, secretKey: []byte(secret)}
 }
 

@@ -18,9 +18,10 @@ type Book struct {
 }
 
 type BookRepository interface {
-	Create(ctx context.Context, b *Book) error
-	Update(ctx context.Context, b *Book) error
-	Delete(ctx context.Context, id int64) error
-	GetByID(CTX context.Context, id int64) error
-	List(ctx context.Context, limit, offset int) ([]*Book, error)
+	BookCreate(ctx context.Context, b *Book) error
+	BookUpdate(ctx context.Context, b *Book) error
+	BookDelete(ctx context.Context, id int64) error
+	BookGetByID(ctx context.Context, id int64) (*Book, error)
+	BookList(ctx context.Context, limit, offset int) ([]*Book, error)
+	BookSearch(ctx context.Context, limit int, keywords []string) ([]*Book, error)
 }

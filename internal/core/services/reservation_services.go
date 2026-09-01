@@ -19,10 +19,10 @@ var (
 )
 
 type ReservationServices struct {
-	repo *repository.ReservationRepository
+	repo domain.ReservationRepository
 }
 
-func NewReservationServices(repo *repository.ReservationRepository) *ReservationServices {
+func NewReservationServices(repo domain.ReservationRepository) *ReservationServices {
 	return &ReservationServices{repo: repo}
 }
 

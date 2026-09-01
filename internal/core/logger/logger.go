@@ -9,10 +9,10 @@ import (
 func New() *slog.Logger {
 	var handler slog.Handler
 
-	if err := os.MkdirAll("/app/logs", 0755); err != nil {
+	if err := os.MkdirAll("/./logs", 0755); err != nil {
 		return slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
-	logFile, err := os.OpenFile("/app/logs/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	logFile, err := os.OpenFile("/./logs/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	var writer io.Writer = os.Stdout
 	if err == nil {
 		writer = io.MultiWriter(os.Stdout, logFile)
