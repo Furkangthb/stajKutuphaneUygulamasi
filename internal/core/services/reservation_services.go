@@ -63,7 +63,7 @@ func (s *ReservationServices) ReservationUpdate(ctx context.Context, requesterID
 	}
 
 	existing, err := s.repo.ReservationGetByID(ctx, id)
-	if err != nil {
+	if err != nil || existing == nil {
 		return nil, ErrReservationNotFound
 	}
 
@@ -88,8 +88,8 @@ func (s *ReservationServices) ReservationUpdate(ctx context.Context, requesterID
 
 func (s *ReservationServices) ReservationGetByID(ctx context.Context, id int) (*domain.Reservation, error) {
 	reservation, err := s.repo.ReservationGetByID(ctx, id)
-	if err != nil {
-		return nil, errors.New("rezervasyon getirilemedi")
+	if err != nil || reservation == nil {
+		return nil, errors.New("rezervasyon getirilemedi veya bulunamadi")
 	}
 	return reservation, nil
 }
